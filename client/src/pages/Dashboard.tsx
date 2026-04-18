@@ -6,8 +6,6 @@ import {
   AlertCircle,
   Loader2,
   Activity,
-  Filter,
-  Search,
   X,
   Calendar,
   Download,
@@ -88,7 +86,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           setActivities([])
         }
       }
-
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
     } finally {

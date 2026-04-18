@@ -21,10 +21,8 @@ interface LayoutProps {
 const API_BASE = 'http://localhost:5000/api'
 const INACTIVITY_LIMIT = 1 * 60 * 1000 // 1 minute
 
-const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleChange }) => {
-
+const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
   const location = useLocation()
-  const navigate = useNavigate()
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
   const [isNotifLoading, setIsNotifLoading] = useState(false)
@@ -62,9 +60,9 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleCha
       const token = localStorage.getItem('token')
       await fetch(`${API_BASE}/activity`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ action: 'LOGOUT', details: reason }),
       })
@@ -83,7 +81,7 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleCha
       setIsNotifLoading(true)
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/activity`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setNotifications(data.slice(0, 5)) // Just the last 5
@@ -130,7 +128,6 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleCha
   ]
 
   const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole))
-
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -185,7 +182,6 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleCha
           </h2>
           <div className="flex items-center gap-4 relative">
             {(userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') && (
-
               <div className="relative" ref={notificationRef}>
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -251,7 +247,6 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleCha
                 </div>
               </button>
             </div>
-
           </div>
         </header>
 

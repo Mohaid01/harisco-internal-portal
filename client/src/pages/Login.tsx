@@ -1,63 +1,58 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react'
+import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 interface LoginProps {
-  onLogin: (role: string, name: string) => void;
+  onLogin: (role: string, name: string) => void
 }
 
-const API_BASE = 'http://localhost:5000/api';
-
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [message, setMessage] = useState(location.state?.message || '');
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState(location.state?.message || '')
 
   useEffect(() => {
     // 1. Check for manual logout messages
-    const storedMessage = sessionStorage.getItem('logoutMessage');
+    const storedMessage = sessionStorage.getItem('logoutMessage')
     if (storedMessage) {
-      setMessage(storedMessage);
-      sessionStorage.removeItem('logoutMessage');
+      setMessage(storedMessage)
+      sessionStorage.removeItem('logoutMessage')
     }
 
     // 2. Check for Google OAuth tokens or errors in the URL
-    const params = new URLSearchParams(location.search);
-    const token = params.get('token');
-    const role = params.get('role');
-    const name = params.get('name');
-    const urlError = params.get('error');
+    const params = new URLSearchParams(location.search)
+    const token = params.get('token')
+    const role = params.get('role')
+    const name = params.get('name')
+    const urlError = params.get('error')
 
     if (urlError) {
-      setError(urlError);
+      setError(urlError)
     }
 
     if (token && role) {
-      localStorage.setItem('token', token);
-      localStorage.setItem('userName', name || '');
-      onLogin(role, name || '');
-      navigate('/dashboard');
+      localStorage.setItem('token', token)
+      localStorage.setItem('userName', name || '')
+      onLogin(role, name || '')
+      navigate('/dashboard')
     }
-
-  }, [location, navigate, onLogin]);
-
+  }, [location, navigate, onLogin])
 
   const handleGoogleLogin = () => {
     // Redirect to backend OAuth route
-    window.location.href = 'http://localhost:5000/auth/google';
-  };
+    window.location.href = 'http://localhost:5000/auth/google'
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-[440px]">
         <div className="flex flex-col items-center mb-6">
-          <img src="/assets/logo-full.png" alt="HarisCo Full Logo" className="h-24 object-contain mb-2" />
+          <img
+            src="/assets/logo-full.png"
+            alt="HarisCo Full Logo"
+            className="h-24 object-contain mb-2"
+          />
           <h1 className="text-2xl font-bold text-slate-900 mt-2 tracking-tight">Internal Portal</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to manage office assets</p>
         </div>
@@ -76,20 +71,28 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
         )}
 
-
         <div className="card !p-8 space-y-6">
-          <button 
-            type="button" 
-            onClick={handleGoogleLogin} 
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
             className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-4 px-4 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group"
           >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg" width="20" height="20" alt="Google" />
+            <img
+              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg"
+              width="20"
+              height="20"
+              alt="Google"
+            />
             Sign in with Google
-            <ArrowRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform ml-auto" />
+            <ArrowRight
+              size={18}
+              className="text-slate-300 group-hover:translate-x-1 transition-transform ml-auto"
+            />
           </button>
 
           <p className="text-[11px] text-center text-slate-400 px-4">
-            Authorized access only. Use your official @harisco.com or authorized Gmail account to log in.
+            Authorized access only. Use your official @harisco.com or authorized Gmail account to
+            log in.
           </p>
         </div>
 
@@ -99,6 +102,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </p>
       </div>
     </div>
-  );
-};
-export default Login;
+  )
+}
+export default Login
