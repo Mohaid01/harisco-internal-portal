@@ -18,7 +18,7 @@ interface LayoutProps {
 }
 
 const API_BASE = 'http://localhost:5000/api'
-const INACTIVITY_LIMIT = 1 * 5 * 1000 // 1 minute
+const INACTIVITY_LIMIT = 1 * 60 * 1000 // 1 minute
 
 const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => {
   const location = useLocation()
@@ -67,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
     if (isTimeout) {
       sessionStorage.setItem('logoutMessage', 'You have been logged out due to inactivity.')
     }
-    
+
     onLogout()
   }
 
