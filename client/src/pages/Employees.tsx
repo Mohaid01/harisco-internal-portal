@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, MoreVertical, Mail, Building2, Loader2, Phone, CreditCard } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { API_BASE } from '../config';
 
 interface Employee {
   id: number;
@@ -12,8 +13,6 @@ interface Employee {
   department: string;
   designation: string;
 }
-
-const API_BASE = 'http://localhost:5000/api';
 
 const DEPARTMENTS = ['Engineering', 'Operations', 'IT', 'HR', 'Marketing', 'Finance', 'Logistics'];
 const DESIGNATIONS = ['Manager', 'Developer', 'Lead', 'Executive', 'Intern', 'Accountant', 'Officer'];

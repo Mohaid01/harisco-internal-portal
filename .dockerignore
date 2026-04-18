@@ -1,0 +1,9 @@
+node_modules
+dist
+backups
+*.db
+*.db-journal
+.env
+.git
+.github
+*.log

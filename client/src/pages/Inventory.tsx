@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Monitor, Laptop, Tablet, Smartphone, Pencil, UserCheck, X, Loader2 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { API_BASE } from '../config';
 
 interface Device {
   id: number;
@@ -16,8 +17,6 @@ interface Employee {
   id: number;
   name: string;
 }
-
-const API_BASE = 'http://localhost:5000/api';
 
 const Inventory: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);

@@ -18,8 +18,8 @@ interface LayoutProps {
   onRoleChange: (role: any) => void
 }
 
-const API_BASE = 'http://localhost:5000/api'
-const INACTIVITY_LIMIT = 1 * 60 * 1000 // 1 minute
+import { API_BASE } from '../config'
+const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
 const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
   const location = useLocation()

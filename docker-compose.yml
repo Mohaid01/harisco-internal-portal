@@ -1,18 +1,30 @@
+version: '3.8'
+
 services:
-  harisco-portal:
-    build: .
+  server:
+    build: ./server
     ports:
       - "5000:5000"
-    volumes:
-      - harisco_data:/app/server/prisma
-      - harisco_backups:/app/server/backups
     environment:
       - NODE_ENV=production
-      - PORT=5000
-      - DATABASE_URL=file:./dev.db
-      - JWT_SECRET=harisco_super_secret_prod_key
-    restart: unless-stopped
+      - DATABASE_URL=file:./data/prod.db
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - SESSION_SECRET=${SESSION_SECRET}
+    volumes:
+      - server-data:/app/prisma/data
+      - server-backups:/app/backups
+    restart: always
+
+  client:
+    build: ./client
+    ports:
+      - "3000:3000"
+    restart: always
 
 volumes:
-  harisco_data:
-  harisco_backups:
+  server-data:
+  server-backups:

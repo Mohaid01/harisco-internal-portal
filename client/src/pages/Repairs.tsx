@@ -31,7 +31,7 @@ interface RepairsProps {
   userName: string
 }
 
-const API_BASE = 'http://localhost:5000/api'
+import { API_BASE } from '../config'
 
 const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
   const [showAddModal, setShowAddModal] = useState(false)

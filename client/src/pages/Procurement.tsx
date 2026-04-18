@@ -18,7 +18,7 @@ interface ProcurementProps {
   userRole: string
 }
 
-const API_BASE = 'http://localhost:5000/api'
+import { API_BASE } from '../config'
 
 const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   const [showAddModal, setShowAddModal] = useState(false)

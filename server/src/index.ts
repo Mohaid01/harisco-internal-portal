@@ -32,8 +32,14 @@ app.use(
     secret: process.env.SESSION_SECRET || 'harisco_session_secret',
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
   })
 );
+
+
 
 app.use(passport.initialize());
 app.use(passport.session());
