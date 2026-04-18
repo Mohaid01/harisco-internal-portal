@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LoginProps {
   onLogin: (role: string) => void;
@@ -12,10 +12,20 @@ const API_BASE = 'http://localhost:5000/api';
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [message, setMessage] = useState(location.state?.message || '');
+
+  useEffect(() => {
+    const storedMessage = sessionStorage.getItem('logoutMessage');
+    if (storedMessage) {
+      setMessage(storedMessage);
+      sessionStorage.removeItem('logoutMessage');
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,11 +66,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-[440px]">
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6">
           <img src="/assets/logo-full.png" alt="HarisCo Full Logo" className="h-24 object-contain mb-2" />
           <h1 className="text-2xl font-bold text-slate-900 mt-2 tracking-tight">Internal Portal</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to manage office assets</p>
         </div>
+
+        {message && (
+          <div className="mb-6 p-4 bg-orange-50 border border-orange-100 rounded-lg text-sm text-orange-800 flex items-center gap-3 shadow-sm">
+            <AlertCircle size={18} className="text-orange-500 flex-shrink-0" />
+            <p>{message}</p>
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="card !p-8 space-y-8">
           <button type="button" onClick={handleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-3 px-4 rounded-lg font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
