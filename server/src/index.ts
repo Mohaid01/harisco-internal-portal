@@ -57,24 +57,30 @@ passport.use(
         let user = await prisma.user.findUnique({ where: { email } });
 
         if (user) {
-          // Update user with googleId if not present
-          if (!user.googleId) {
-            user = await prisma.user.update({
-              where: { email },
-              data: { googleId: profile.id },
-            });
-          }
+          // Fetch official name from Employee table
+          const employee = await prisma.employee.findUnique({ where: { email } });
+          const officialName = employee?.name || profile.displayName;
 
+          // Update user with googleId and name
+          user = await prisma.user.update({
+            where: { email },
+            data: { 
+              googleId: profile.id,
+              name: officialName 
+            },
+          });
+          
           // Log login activity
           await prisma.activityLog.create({
             data: {
               action: 'LOGIN',
               details: `User logged in via Google: ${email}`,
-              performedBy: `${user.role} User`,
+              performedBy: `${user.role} User: ${officialName}`,
             },
           });
 
           return done(null, user);
+
         } else {
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
@@ -289,7 +295,26 @@ app.post('/api/procurement', async (req, res) => {
       data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
     });
     await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`);
+
+    // Notify all IT users
+    const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
+    for (const it of itUsers) {
+      await sendStatusEmail(
+        it.email,
+        `🛒 New Procurement Request: ${item}`,
+        `<h2>New Procurement Request</h2>
+         <p>A new item has been requested by <strong>${requester}</strong>.</p>
+         <ul>
+           <li><strong>Item:</strong> ${item}</li>
+           <li><strong>Est. Cost:</strong> ${estimatedCost}</li>
+           <li><strong>Type:</strong> ${type}</li>
+         </ul>
+         <p>Please review it in the IT Portal.</p>`
+      );
+    }
+
     res.json(procurement);
+
   } catch (error) {
     res.status(500).json({ error: 'Failed to create request' });
   }
@@ -389,7 +414,26 @@ app.post('/api/repairs', async (req: any, res) => {
       `Repair requested for ${device.model} [${device.serial}] by ${user.name}`,
       user.name
     );
+
+    // Notify all IT users
+    const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
+    for (const it of itUsers) {
+      await sendStatusEmail(
+        it.email,
+        `🚨 New Repair Request: ${device.model}`,
+        `<h2>New Repair Request</h2>
+         <p>A new repair has been requested by <strong>${user.name}</strong>.</p>
+         <ul>
+           <li><strong>Device:</strong> ${device.model}</li>
+           <li><strong>Serial:</strong> ${device.serial}</li>
+           <li><strong>Problem:</strong> ${description}</li>
+         </ul>
+         <p>Please review it in the IT Portal.</p>`
+      );
+    }
+
     res.json(repair);
+
   } catch (error) {
     res.status(500).json({ error: 'Failed to create repair request' });
   }

@@ -4,50 +4,57 @@ const prisma = new PrismaClient();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTION USER SEED
-// Safe to run at any time - uses upsert so it NEVER deletes existing data.
+// OVERWRITE MODE: This script will upsert the users below and DELETE any other users.
 // Add real email addresses below before deploying.
 // Roles: IT, Admin, Manager, Employee
 // ─────────────────────────────────────────────────────────────────────────────
 const PRODUCTION_USERS = [
   {
     email: 'mohidb.shahid01@gmail.com',
-    name: 'Mohid Shahid',
     role: 'IT',
   },
   {
     email: 'mohaidbinshahis@gmail.com',
-    name: 'Mohid Bin Shahid',
     role: 'Employee',
   },
   // ── Add more users below ──────────────────────────────────────────────────
-  // { email: "manager@harisco.com", name: "Manager Name", role: "Manager" },
-  // { email: "admin@harisco.com", name: "Admin Name", role: "Admin" },
-  // { email: "employee@harisco.com", name: "Employee Name", role: "Employee" },
+  // { email: "manager@harisco.com", role: "Manager" },
+  // { email: "admin@harisco.com", role: "Admin" },
+  // { email: "employee@harisco.com", role: "Employee" },
 ];
 
 async function main() {
-  console.log('🌱 Running production user seed (safe upsert mode)...\n');
+  console.log('🌱 Running production user seed (OVERWRITE mode)...\n');
 
+  // 1. Upsert official users
   for (const user of PRODUCTION_USERS) {
     const result = await prisma.user.upsert({
       where: { email: user.email },
       update: {
-        name: user.name,
         role: user.role,
       },
       create: {
         email: user.email,
-        name: user.name,
         role: user.role,
-        // No password — authentication is via Google OAuth
       },
     });
 
-    const verb = result.id ? '✅ Upserted' : '✅ Created';
-    console.log(`${verb}: ${user.email} (${user.role})`);
+    console.log(`✅ Upserted: ${user.email} (${user.role})`);
   }
 
-  console.log(`\n✅ Production seed complete! ${PRODUCTION_USERS.length} user(s) processed.`);
+  // 2. Overwrite: Delete anyone NOT in the list
+  const authorizedEmails = PRODUCTION_USERS.map(u => u.email);
+  const deleted = await prisma.user.deleteMany({
+    where: {
+      email: { notIn: authorizedEmails },
+    },
+  });
+
+  if (deleted.count > 0) {
+    console.log(`\n🗑️  Deleted ${deleted.count} unauthorized user(s) not in the seed list.`);
+  }
+
+  console.log(`\n✨ Production seed sync complete! Authorized users: ${PRODUCTION_USERS.length}`);
 }
 
 main()
