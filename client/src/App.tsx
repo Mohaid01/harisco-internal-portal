@@ -42,7 +42,9 @@ function App() {
         />
         <Route
           path="/login"
-          element={<Login onLogin={(role, name) => handleLogin(true, role, name)} />}
+          element={
+            <Login onLogin={(role: UserRole, name: string) => handleLogin(true, role, name)} />
+          }
         />
 
         {/* Protected Routes */}
