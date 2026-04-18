@@ -3,8 +3,9 @@ import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 interface LoginProps {
-  onLogin: (role: string, name: string) => void
+  onLogin: (role: any, name: string) => void
 }
+
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const navigate = useNavigate()
