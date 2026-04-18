@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { API_BASE } from '../config'
+import { AUTH_BASE } from '../config'
 
 interface LoginProps {
   onLogin: (role: any, name: string) => void
 }
-
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const navigate = useNavigate()
@@ -43,7 +42,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const handleGoogleLogin = () => {
     // Redirect to backend OAuth route
-    window.location.href = `${API_BASE}/auth/google`
+    window.location.href = AUTH_BASE
   }
 
   return (

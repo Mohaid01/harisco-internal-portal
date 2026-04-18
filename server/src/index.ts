@@ -11,7 +11,8 @@ import bcrypt from 'bcryptjs';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import { sendStatusEmail } from './utils/mailer.ts';
+import { sendStatusEmail } from './utils/mailer.js';
+
 
 dotenv.config();
 
