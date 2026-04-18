@@ -150,13 +150,6 @@ export const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-// --- Activity Logger Helper ---
-const logActivity = async (action: string, details: string, performedBy: string = 'Admin') => {
-  await prisma.activityLog.create({
-    data: { action, details, performedBy },
-  });
-};
-
 // --- Backup Service ---
 const DB_PATH = path.join(__dirname, '../prisma/dev.db');
 const BACKUP_DIR = path.join(__dirname, '../backups');
@@ -165,29 +158,43 @@ if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
-// Schedule backup every day at midnight
-cron.schedule('0 0 * * *', () => {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
+const triggerBackup = async () => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
 
-  if (fs.existsSync(DB_PATH)) {
-    fs.copyFileSync(DB_PATH, backupPath);
-    console.log(`[Backup] Database backed up to ${backupPath}`);
+    if (fs.existsSync(DB_PATH)) {
+      fs.copyFileSync(DB_PATH, backupPath);
+      console.log(`[Backup] Activity-triggered backup created: ${backupPath}`);
 
-    // Cleanup: Keep only last 14 days of backups
-    const files = fs.readdirSync(BACKUP_DIR);
-    if (files.length > 14) {
-      const sortedFiles = files.sort((a, b) => {
-        return (
-          fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
-          fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
-        );
-      });
-      fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
-      console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
+      // Cleanup: Keep only last 10 activity-based backups
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('backup-'));
+      if (files.length > 10) {
+        const sortedFiles = files.sort((a, b) => {
+          return (
+            fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
+            fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
+          );
+        });
+        fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
+        console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
+      }
     }
+  } catch (error) {
+    console.error('[Backup] Failed to create triggered backup:', error);
   }
-});
+};
+
+// --- Activity Logger Helper ---
+const logActivity = async (action: string, details: string, performedBy: string = 'Admin') => {
+  await prisma.activityLog.create({
+    data: { action, details, performedBy },
+  });
+  
+  // Trigger backup on every system change/log
+  await triggerBackup();
+};
+
 
 // Manual backup endpoint (optional)
 app.post('/api/admin/backup', (req, res) => {
