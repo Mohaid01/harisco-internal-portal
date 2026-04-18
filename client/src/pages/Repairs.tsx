@@ -8,7 +8,9 @@ interface Device {
   model: string;
   serial: string;
   status: string;
+  assignedTo?: string;
 }
+
 
 interface Employee {
   id: number;
@@ -21,17 +23,20 @@ interface RepairRequest {
   device: { model: string; serial: string };
   requester: string;
   description: string;
-  status: 'PENDING_IT' | 'PENDING_ADMIN' | 'PENDING_DIRECTOR' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING_IT' | 'PENDING_ADMIN' | 'PENDING_MANAGER' | 'APPROVED' | 'REJECTED';
+
   createdAt: string;
 }
 
 interface RepairsProps {
   userRole: string;
+  userName: string;
 }
 
 const API_BASE = 'http://localhost:5000/api';
 
-const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
+const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedRepair, setSelectedRepair] = useState<RepairRequest | null>(null);
   const [repairs, setRepairs] = useState<RepairRequest[]>([]);
@@ -90,7 +95,8 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
   };
 
   const handleNewRepairSubmit = async () => {
-    if (!selectedDevice || !requester || !description) return;
+    const finalRequester = userRole === 'Employee' ? userName : requester;
+    if (!selectedDevice || !finalRequester || !description) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -102,7 +108,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
         },
         body: JSON.stringify({
           deviceId: selectedDevice.id,
-          requester,
+          requester: finalRequester,
           description,
           performedBy: `${userRole} Authority`
         }),
@@ -119,10 +125,11 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
     }
   };
 
+
   const canApprove = (status: string) => {
     if (userRole === 'IT' && status === 'PENDING_IT') return true;
-    if (userRole === 'ADMIN' && status === 'PENDING_ADMIN') return true;
-    if (userRole === 'DIRECTOR' && (status === 'PENDING_DIRECTOR' || status === 'APPROVED')) return true;
+    if (userRole === 'Admin' && status === 'PENDING_ADMIN') return true;
+    if (userRole === 'Manager' && (status === 'PENDING_MANAGER' || status === 'APPROVED')) return true;
     return false;
   }
 
@@ -130,12 +137,13 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
     switch (status) {
       case 'PENDING_IT': return { label: 'IT Review', icon: <Clock size={14} />, color: 'bg-blue-100 text-blue-700' };
       case 'PENDING_ADMIN': return { label: 'Admin Approval', icon: <Clock size={14} />, color: 'bg-purple-100 text-purple-700' };
-      case 'PENDING_DIRECTOR': return { label: 'Director Final', icon: <Clock size={14} />, color: 'bg-orange-100 text-orange-700' };
+      case 'PENDING_MANAGER': return { label: 'Manager Final', icon: <Clock size={14} />, color: 'bg-orange-100 text-orange-700' };
       case 'APPROVED': return { label: 'Authorized', icon: <CheckCircle2 size={14} />, color: 'bg-green-100 text-green-700' };
       case 'REJECTED': return { label: 'Rejected', icon: <XCircle size={14} />, color: 'bg-red-100 text-red-700' };
       default: return { label: status, icon: <Clock size={14} />, color: 'bg-slate-100' };
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -298,25 +306,40 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
                   }}
                 >
                   <option value="">Search or select device...</option>
-                  {devices.map(d => (
+                  {(userRole === 'Employee' 
+                    ? devices.filter(d => d.assignedTo === userName || d.assignedTo === localStorage.getItem('userEmail')) // Check both just in case
+                    : devices
+                  ).map(d => (
                     <option key={d.id} value={d.id}>{d.model} — {d.serial}</option>
                   ))}
                 </select>
+                {userRole === 'Employee' && devices.filter(d => d.assignedTo === userName).length === 0 && (
+                  <p className="text-[10px] text-orange-600 font-medium">No devices are currently issued to you.</p>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Requester Name</label>
-                <select 
-                  className="input appearance-none bg-white py-2"
-                  value={requester}
-                  onChange={(e) => setRequester(e.target.value)}
-                >
-                  <option value="">Select employee...</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.name}>{emp.name}</option>
-                  ))}
-                </select>
-              </div>
+              {userRole !== 'Employee' ? (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Requester Name</label>
+                  <select 
+                    className="input appearance-none bg-white py-2"
+                    value={requester}
+                    onChange={(e) => setRequester(e.target.value)}
+                  >
+                    <option value="">Select employee...</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.name}>{emp.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Requesting As</p>
+                  <p className="text-sm font-semibold text-slate-700">{userName}</p>
+                </div>
+              )
+              }
+
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Problem Description</label>
@@ -330,9 +353,13 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
             </div>
             <div className="p-6 bg-slate-50 flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
-              <Button onClick={handleNewRepairSubmit} disabled={!selectedDevice || !requester || !description}>
+              <Button 
+                onClick={handleNewRepairSubmit} 
+                disabled={!selectedDevice || !description || (userRole !== 'Employee' && !requester)}
+              >
                 Submit for IT Review
               </Button>
+
             </div>
           </div>
         </div>

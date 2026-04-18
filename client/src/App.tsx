@@ -53,7 +53,8 @@ function App() {
           <Route path="employees" element={<Employees />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="procurement" element={<Procurement userRole={userRole} />} />
-          <Route path="repairs" element={<Repairs userRole={userRole} />} />
+          <Route path="repairs" element={<Repairs userRole={userRole} userName={userName} />} />
+
         </Route>
 
         {/* Fallback */}

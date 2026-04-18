@@ -64,7 +64,7 @@ passport.use(
               data: { googleId: profile.id },
             });
           }
-          
+
           // Log login activity
           await prisma.activityLog.create({
             data: {
@@ -78,7 +78,7 @@ passport.use(
         } else {
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
-          
+
           await prisma.activityLog.create({
             data: {
               action: 'LOGIN_BLOCKED',
@@ -89,14 +89,12 @@ passport.use(
 
           return done(null, false, { message: 'You are not allowed. Please contact IT.' });
         }
-
       } catch (error) {
         return done(error);
       }
     }
   )
 );
-
 
 // --- Google Auth Routes ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
@@ -114,19 +112,23 @@ app.get('/auth/google/callback', (req, res, next) => {
     }
 
     // Success - sign token and redirect
-    const token = jwt.sign({ 
-      id: user.id, 
-      email: user.email, 
-      role: user.role,
-      name: user.name 
-    }, JWT_SECRET, {
-      expiresIn: '8h',
-    });
-    res.redirect(`${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}`);
-
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+      JWT_SECRET,
+      {
+        expiresIn: '8h',
+      }
+    );
+    res.redirect(
+      `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}`
+    );
   })(req, res, next);
 });
-
 
 // --- Authentication Middleware ---
 export const authenticateToken = (req: any, res: any, next: any) => {
@@ -344,20 +346,48 @@ app.get('/api/repairs', async (req, res) => {
   res.json(repairs);
 });
 
-app.post('/api/repairs', async (req, res) => {
-  const { deviceId, requester, description } = req.body;
+app.post('/api/repairs', async (req: any, res) => {
+  const { deviceId, description } = req.body;
+  const user = req.user; // From authenticateToken middleware
+
   try {
-    const repair = await prisma.repair.create({
-      data: { deviceId, requester, description, status: 'PENDING_IT' },
+    // Fetch the device to check ownership
+    const device = await prisma.device.findUnique({
+      where: { id: deviceId },
     });
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
+    }
+
+    // Restriction: Employees can only request repairs for their OWN assigned devices
+    if (user.role === 'Employee') {
+      if (device.assignedTo !== user.email && device.assignedTo !== user.name) {
+        return res.status(403).json({
+          error: 'Access denied. You can only request repairs for devices issued to you.',
+        });
+      }
+    }
+
+    const repair = await prisma.repair.create({
+      data: {
+        deviceId,
+        requester: user.name || user.email,
+        description,
+        status: 'PENDING_IT',
+      },
+    });
+
     // Update device status to REPAIR
     await prisma.device.update({
       where: { id: deviceId },
       data: { status: 'REPAIR' },
     });
+
     await logActivity(
       'CREATE_REPAIR',
-      `Repair requested for Device ID ${deviceId} by ${requester}`
+      `Repair requested for ${device.model} [${device.serial}] by ${user.name}`,
+      user.name
     );
     res.json(repair);
   } catch (error) {
