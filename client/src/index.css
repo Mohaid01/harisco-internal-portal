@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-harisco-blue: #004A99;
+  --color-harisco-dark: #003366;
+  --color-harisco-light: #E6F0FF;
+}
+
+:root {
+  --harisco-blue: #004A99;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply font-semibold text-slate-800;
+}
+
+.btn {
+  @apply px-4 py-2 rounded font-medium transition-all duration-200;
+}
+
+.btn-primary {
+  @apply bg-harisco-blue text-white hover:bg-harisco-dark shadow-sm;
+}
+
+.btn-secondary {
+  @apply bg-white text-slate-700 border border-slate-200 hover:bg-slate-50;
+}
+
+.card {
+  @apply bg-white border border-slate-200 rounded-lg shadow-sm p-6;
+}
+
+.input {
+  @apply w-full px-3 py-2 bg-white border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-harisco-blue/20 focus:border-harisco-blue transition-all;
+}

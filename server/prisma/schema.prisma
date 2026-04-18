@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  role      String   @default("STAFF") // IT, ADMIN, DIRECTOR, STAFF
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String   @unique
+  cnic        String?
+  phoneNumber String?
+  department  String
+  designation String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Device {
+  id         Int      @id @default(autoincrement())
+  serial     String   @unique
+  model      String
+  type       String
+  status     String   @default("IN_STOCK") // IN_STOCK, ISSUED, REPAIR
+  assignedTo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  repairs    Repair[]
+}
+
+model Procurement {
+  id            Int      @id @default(autoincrement())
+  item          String
+  estimatedCost String
+  requester     String
+  type          String   @default("Laptop")
+  status        String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_DIRECTOR, APPROVED, PURCHASED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Repair {
+  id          Int      @id @default(autoincrement())
+  deviceId    Int
+  device      Device   @relation(fields: [deviceId], references: [id])
+  requester   String
+  description String
+  status      String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_DIRECTOR, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  userId      String?
+  performedBy String?  @default("Admin")
+  action      String
+  details     String?
+  timestamp   DateTime @default(now())
+}
