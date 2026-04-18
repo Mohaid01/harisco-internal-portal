@@ -35,7 +35,10 @@ const Employees: React.FC = () => {
   const fetchEmployees = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_BASE}/employees`);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/employees`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await res.json();
       setEmployees(data);
     } catch (error) {
@@ -51,9 +54,13 @@ const Employees: React.FC = () => {
 
   const handleAddEmployee = async () => {
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/employees`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ 
           name, 
           email, 

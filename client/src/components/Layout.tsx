@@ -57,9 +57,13 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
 
   const handleLogout = async (reason = 'User logged out', isTimeout = false) => {
     try {
+      const token = localStorage.getItem('token')
       await fetch(`${API_BASE}/activity`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ action: 'LOGOUT', details: reason }),
       })
     } catch (e) {}
@@ -75,7 +79,10 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
   const fetchNotifications = async () => {
     try {
       setIsNotifLoading(true)
-      const res = await fetch(`${API_BASE}/activity`)
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${API_BASE}/activity`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
       const data = await res.json()
       setNotifications(data.slice(0, 5)) // Just the last 5
     } catch (error) {

@@ -1,15 +1,18 @@
 services:
-  db:
-    image: postgres:15-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: harisco_user
-      POSTGRES_PASSWORD: harisco_password
-      POSTGRES_DB: harisco_portal
+  harisco-portal:
+    build: .
     ports:
-      - "5432:5432"
+      - "5000:5000"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - harisco_data:/app/server/prisma
+      - harisco_backups:/app/server/backups
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=harisco_super_secret_prod_key
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
+  harisco_data:
+  harisco_backups:

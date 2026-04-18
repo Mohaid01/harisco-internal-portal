@@ -41,10 +41,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       if (res.ok) {
         const data = await res.json();
-        // Log the activity
+        
+        // Save the JWT token
+        localStorage.setItem('token', data.token);
+
+        // Log the activity (ensure we pass the token if the backend requires it now, but login might be exempt? Wait, /api/activity requires token!)
         await fetch(`${API_BASE}/activity`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.token}`
+          },
           body: JSON.stringify({ 
             action: 'LOGIN', 
             details: `User logged in: ${email}`,

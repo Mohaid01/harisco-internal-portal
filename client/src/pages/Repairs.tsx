@@ -47,10 +47,12 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
   const fetchRepairs = async () => {
     try {
       setIsLoading(true);
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
       const [repRes, devRes, empRes] = await Promise.all([
-        fetch(`${API_BASE}/repairs`),
-        fetch(`${API_BASE}/inventory`),
-        fetch(`${API_BASE}/employees`)
+        fetch(`${API_BASE}/repairs`, { headers }),
+        fetch(`${API_BASE}/inventory`, { headers }),
+        fetch(`${API_BASE}/employees`, { headers })
       ]);
       const [repData, devData, empData] = await Promise.all([repRes.json(), devRes.json(), empRes.json()]);
       setRepairs(repData);
@@ -69,9 +71,13 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
 
   const handleUpdateStatus = async (id: number, status: string) => {
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/repairs/${id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
       });
       if (res.ok) {
@@ -87,9 +93,13 @@ const Repairs: React.FC<RepairsProps> = ({ userRole }) => {
     if (!selectedDevice || !requester || !description) return;
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/repairs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           deviceId: selectedDevice.id,
           requester,

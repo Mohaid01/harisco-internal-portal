@@ -39,7 +39,10 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch(`${API_BASE}/procurement`)
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${API_BASE}/procurement`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
       const data = await res.json()
       setRequests(data)
     } catch (error) {
@@ -55,9 +58,13 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
 
   const handleSubmitRequest = async () => {
     try {
+      const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           item,
           estimatedCost: cost,
@@ -79,9 +86,13 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
 
   const handleUpdateStatus = async (id: number, status: string) => {
     try {
+      const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement/${id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
       })
       if (res.ok) {
@@ -97,9 +108,13 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     if (!selectedRequest || !intakeSerial || !intakeModel) return
 
     try {
+      const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement/${selectedRequest.id}/intake`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           serial: intakeSerial,
           model: intakeModel,

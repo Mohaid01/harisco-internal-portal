@@ -39,9 +39,11 @@ const Inventory: React.FC = () => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
       const [devRes, empRes] = await Promise.all([
-        fetch(`${API_BASE}/inventory`),
-        fetch(`${API_BASE}/employees`)
+        fetch(`${API_BASE}/inventory`, { headers }),
+        fetch(`${API_BASE}/employees`, { headers })
       ]);
       const [devData, empData] = await Promise.all([devRes.json(), empRes.json()]);
       setDevices(devData);
@@ -81,10 +83,14 @@ const Inventory: React.FC = () => {
     try {
       const url = modalMode === 'add' ? `${API_BASE}/inventory` : `${API_BASE}/inventory/${selectedDevice?.id}`;
       const method = modalMode === 'add' ? 'POST' : 'PUT';
+      const token = localStorage.getItem('token');
       
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           serial: formSerial,
           model: formModel,
@@ -112,10 +118,14 @@ const Inventory: React.FC = () => {
     if (!selectedDevice || !issueEmployee) return;
     
     try {
+      const token = localStorage.getItem('token');
       const selectedEmp = employees.find(e => e.id === parseInt(issueEmployee));
       const res = await fetch(`${API_BASE}/inventory/${selectedDevice.id}/issue`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ assignedTo: selectedEmp?.name }),
       });
 

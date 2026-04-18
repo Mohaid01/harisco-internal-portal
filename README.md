@@ -34,48 +34,43 @@ Every mutation (create, update, approve, issue) is logged into an immutable Acti
 
 ---
 
-## 🛠️ Local Development Setup
+## 🛠️ Environments & Configuration
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- Git
+The HarisCo portal supports two distinct environments. **SQLite** is used as the database for both environments to ensure simplicity and portability for an internal network tool.
 
-### 1. Clone the Repository
+### 1. Development Environment (Local Iteration)
+Used when actively editing code. The frontend and backend run on separate ports with hot-reloading.
+
+**Prerequisites:** Node.js (v18+)
+
 ```bash
-git clone https://github.com/Mohaid01/harisco-internal-portal.git
-cd harisco-internal-portal
-```
-
-### 2. Setup the Backend (Server)
-Open a terminal and navigate to the `server` directory:
-```bash
+# Terminal 1: Start Backend (Port 5000)
 cd server
-
-# Install dependencies
 npm install
-
-# Initialize the Prisma SQLite database and generate the client
 npx prisma db push
-npx prisma generate
-
-# Seed the database with initial dummy data and test accounts
-npm run seed
-
-# Start the backend development server (Runs on port 5000)
+npm run seed        # Only run once to populate test accounts
 npm run dev
-```
 
-### 3. Setup the Frontend (Client)
-Open a **new** terminal and navigate to the `client` directory:
-```bash
+# Terminal 2: Start Frontend (Port 5173)
 cd client
-
-# Install dependencies
 npm install
-
-# Start the frontend development server (Runs on port 5173)
 npm run dev
 ```
+
+### 2. Production Environment (Docker All-in-One)
+Used when deploying the application to your local office server. The React frontend is compiled into static files and served directly by the Express backend, packaged inside a single, lightweight Docker container.
+
+**Prerequisites:** Docker and Docker Compose
+
+1. Move the entire project folder to your production server.
+2. In the root directory (where `docker-compose.yml` is located), run:
+```bash
+docker-compose up -d --build
+```
+3. The portal is now live at `http://<YOUR_SERVER_IP>:5000`!
+
+**Where is the production data stored?**
+Docker Compose maps the internal SQLite database (`dev.db`) and automated backups to Docker Volumes on your host machine (`harisco_data` and `harisco_backups`). This ensures your data persists even if the container is restarted or updated.
 
 ---
 
@@ -90,7 +85,5 @@ If you ran the `npm run seed` command, you can log in using the following test c
 | **Admin** | `manager@harisco.com` | `manager123` |
 | **Staff** | `staff@harisco.com` | `staff123` |
 
-*(Note: In the local dev environment, passwords are plain text or hardcoded fallbacks. Production deployment will utilize secure hashing or OAuth).*
+*(Note: Passwords are now securely hashed in the database using bcrypt!)*
 
-## 🐳 Docker (Coming Soon)
-A `docker-compose.yml` file is included in the root directory and is currently being configured for one-click local office deployments.

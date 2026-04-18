@@ -6,6 +6,8 @@ import fs from "fs";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
 import { fileURLToPath } from "url";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 dotenv.config();
 
@@ -15,9 +17,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || "harisco_super_secret_dev_key";
 
 app.use(cors());
 app.use(express.json());
+
+// --- Authentication Middleware ---
+export const authenticateToken = (req: any, res: any, next: any) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "Access denied. No token provided." });
+
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) return res.status(403).json({ error: "Invalid token." });
+    req.user = user;
+    next();
+  });
+};
 
 // --- Activity Logger Helper ---
 const logActivity = async (
@@ -75,6 +92,13 @@ app.post("/api/admin/backup", (req, res) => {
 });
 
 // --- API Routes ---
+
+app.use("/api", (req, res, next) => {
+  if (req.path === "/login" || req.path === "/health") {
+    return next();
+  }
+  return authenticateToken(req, res, next);
+});
 
 // Health Check
 app.get("/api/health", (req, res) => {
@@ -269,21 +293,28 @@ app.get("/api/activity", async (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
-  // In a real app, we'd check the hashed password.
-  // For now, we fetch the role configured in the DB.
   try {
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (user) {
-      res.json({ role: user.role });
-    } else if (email === "admin@harisco.com" && password === "admin123") {
-      // Default fallback for initial setup
-      res.json({ role: "DIRECTOR" });
-    } else {
-      res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+
+    res.json({ token, role: user.role });
   } catch (error) {
     res.status(500).json({ error: "Login failed" });
   }
@@ -298,6 +329,16 @@ app.post("/api/activity", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Failed to log activity" });
   }
+});
+
+// --- Production Frontend Serving ---
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "../public")));
+
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 app.listen(PORT, () => {

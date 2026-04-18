@@ -34,12 +34,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
   const fetchData = async () => {
     try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
       const [emp, dev, rep, pro, act] = await Promise.all([
-        fetch(`${API_BASE}/employees`).then(r => r.json()),
-        fetch(`${API_BASE}/inventory`).then(r => r.json()),
-        fetch(`${API_BASE}/repairs`).then(r => r.json()),
-        fetch(`${API_BASE}/procurement`).then(r => r.json()),
-        fetch(`${API_BASE}/activity`).then(r => r.json()),
+        fetch(`${API_BASE}/employees`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/inventory`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/repairs`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/procurement`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/activity`, { headers }).then(r => r.json()),
       ]);
 
       if (userRole === 'STAFF') {
