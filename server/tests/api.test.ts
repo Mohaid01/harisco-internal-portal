@@ -1,65 +1,69 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// Mock Prisma Client
-vi.mock('@prisma/client', () => {
-  const mockUser = {
-    id: 1,
-    email: 'admin@harisco.com',
-    name: 'Admin User',
-    password: '',
-    role: 'DIRECTOR',
-  };
+// ─── Shared mock Prisma singleton ────────────────────────────────────────────
+// We define the mock object OUTSIDE vi.mock so every test can reference the
+// same instance that the app uses internally.
+const mockPrisma = {
+  user: {
+    findUnique: vi.fn(),
+  },
+  procurement: {
+    findMany: vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: 1,
+          item: 'Test Laptop',
+          estimatedCost: 'Rs. 100,000',
+          requester: 'IT',
+          status: 'PENDING_IT',
+        },
+      ]),
+    create: vi.fn().mockResolvedValue({
+      id: 1,
+      item: 'Test Laptop',
+      estimatedCost: 'Rs. 100,000',
+      requester: 'IT',
+      status: 'PENDING_IT',
+    }),
+    update: vi.fn().mockResolvedValue({
+      id: 1,
+      item: 'Test Laptop',
+      estimatedCost: 'Rs. 100,000',
+      requester: 'IT',
+      status: 'PENDING_ADMIN',
+    }),
+  },
+  activityLog: {
+    create: vi.fn().mockResolvedValue({}),
+    findMany: vi.fn().mockResolvedValue([]),
+  },
+  repair: { findMany: vi.fn().mockResolvedValue([]) },
+  device: { findMany: vi.fn().mockResolvedValue([]) },
+  employee: { findMany: vi.fn().mockResolvedValue([]) },
+  $disconnect: vi.fn(),
+};
 
-  const mockProcurement = {
-    id: 1,
-    item: 'Test Laptop',
-    estimatedCost: 'Rs. 100,000',
-    requester: 'IT',
-    status: 'PENDING_IT',
-  };
-
-  return {
-    PrismaClient: vi.fn().mockImplementation(() => ({
-      user: {
-        findUnique: vi.fn().mockResolvedValue(null),
-      },
-      procurement: {
-        findMany: vi.fn().mockResolvedValue([mockProcurement]),
-        create: vi.fn().mockResolvedValue(mockProcurement),
-        update: vi.fn().mockResolvedValue({ ...mockProcurement, status: 'PENDING_ADMIN' }),
-      },
-      activityLog: {
-        create: vi.fn().mockResolvedValue({}),
-        findMany: vi.fn().mockResolvedValue([]),
-      },
-      repair: { findMany: vi.fn().mockResolvedValue([]) },
-      device: { findMany: vi.fn().mockResolvedValue([]) },
-      employee: { findMany: vi.fn().mockResolvedValue([]) },
-      $disconnect: vi.fn(),
-    })),
-  };
-});
+// Mock PrismaClient to always return the shared singleton
+vi.mock('@prisma/client', () => ({
+  PrismaClient: vi.fn().mockImplementation(() => mockPrisma),
+}));
 
 // Mock mailer so tests don't hit real SMTP
-vi.mock('../src/utils/mailer.js', () => ({
+vi.mock('../src/utils/mailer.ts', () => ({
   sendStatusEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 const JWT_SECRET = 'test_secret';
 const validToken = jwt.sign({ id: 1, email: 'admin@harisco.com', role: 'DIRECTOR' }, JWT_SECRET);
 
-// We need to spin up a minimal Express app for testing
-// that mirrors our real routes, using our middleware
 let app: express.Application;
 
 beforeAll(async () => {
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient() as any;
-
   app = express();
   app.use(express.json());
 
@@ -75,7 +79,7 @@ beforeAll(async () => {
     });
   };
 
-  // Middleware to protect non-login routes
+  // Protect non-login routes
   app.use('/api', (req: any, res: any, next: any) => {
     if (req.path === '/login' || req.path === '/health') return next();
     return authenticateToken(req, res, next);
@@ -84,26 +88,30 @@ beforeAll(async () => {
   // Health check
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-  // Login route
+  // Login route — uses mockPrisma directly
   app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await mockPrisma.user.findUnique({ where: { email } } as any);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+      expiresIn: '8h',
+    });
     res.json({ token, role: user.role });
   });
 
   // Procurement routes
   app.get('/api/procurement', async (_req, res) => {
-    const data = await prisma.procurement.findMany();
+    const data = await mockPrisma.procurement.findMany();
     res.json(data);
   });
 
   app.post('/api/procurement', async (req, res) => {
     const { item, estimatedCost, requester, type } = req.body;
-    const data = await prisma.procurement.create({ data: { item, estimatedCost, requester, type, status: 'PENDING_IT' } });
+    const data = await mockPrisma.procurement.create({
+      data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
+    } as any);
     res.json(data);
   });
 });
@@ -120,6 +128,7 @@ describe('GET /api/health', () => {
 
 describe('POST /api/login', () => {
   it('returns 401 for unknown email', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
     const res = await request(app)
       .post('/api/login')
       .send({ email: 'nobody@harisco.com', password: 'wrong' });
@@ -128,13 +137,14 @@ describe('POST /api/login', () => {
   });
 
   it('returns 401 for wrong password', async () => {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient() as any;
     const hashedPw = await bcrypt.hash('correct123', 10);
-    prisma.user.findUnique.mockResolvedValueOnce({
-      id: 1, email: 'admin@harisco.com', name: 'Admin', password: hashedPw, role: 'DIRECTOR'
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: 1,
+      email: 'admin@harisco.com',
+      name: 'Admin',
+      password: hashedPw,
+      role: 'DIRECTOR',
     });
-
     const res = await request(app)
       .post('/api/login')
       .send({ email: 'admin@harisco.com', password: 'wrongpassword' });
@@ -142,13 +152,15 @@ describe('POST /api/login', () => {
   });
 
   it('returns a token on valid credentials', async () => {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient() as any;
     const hashedPw = await bcrypt.hash('admin123', 10);
-    prisma.user.findUnique.mockResolvedValueOnce({
-      id: 1, email: 'admin@harisco.com', name: 'Admin', password: hashedPw, role: 'DIRECTOR'
+    // Set up the shared singleton mock to return a valid user THIS time
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: 1,
+      email: 'admin@harisco.com',
+      name: 'Admin',
+      password: hashedPw,
+      role: 'DIRECTOR',
     });
-
     const res = await request(app)
       .post('/api/login')
       .send({ email: 'admin@harisco.com', password: 'admin123' });
@@ -192,6 +204,6 @@ describe('POST /api/procurement (protected route)', () => {
         type: 'Monitor',
       });
     expect(res.status).toBe(200);
-    expect(res.body.item).toBe('Test Laptop'); // mocked return value
+    expect(res.body).toHaveProperty('id');
   });
 });

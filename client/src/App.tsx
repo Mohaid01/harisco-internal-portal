@@ -8,18 +8,23 @@ import Repairs from './pages/Repairs';
 import Procurement from './pages/Procurement';
 import Login from './pages/Login';
 
-export type UserRole = 'IT' | 'ADMIN' | 'DIRECTOR' | 'STAFF';
+export type UserRole = 'IT' | 'Admin' | 'Manager' | 'Employee';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('isAuthenticated') === 'true');
-  const [userRole, setUserRole] = useState<UserRole>((localStorage.getItem('userRole') as UserRole) || 'DIRECTOR');
+  const [userRole, setUserRole] = useState<UserRole>((localStorage.getItem('userRole') as UserRole) || 'Manager');
+  const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
 
-  const handleLogin = (status: boolean, role: UserRole = 'DIRECTOR') => {
+  const handleLogin = (status: boolean, role: UserRole = 'Manager', name: string = '') => {
+
     setIsAuthenticated(status);
     setUserRole(role);
+    setUserName(name);
     localStorage.setItem('isAuthenticated', String(status));
     localStorage.setItem('userRole', role);
+    localStorage.setItem('userName', name);
   };
+
 
   const handleRoleChange = (role: UserRole) => {
     setUserRole(role);
@@ -30,7 +35,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
-        <Route path="/login" element={<Login onLogin={(role) => handleLogin(true, role)} />} />
+        <Route path="/login" element={<Login onLogin={(role, name) => handleLogin(true, role, name)} />} />
+
         
         {/* Protected Routes */}
         <Route element={
@@ -38,6 +44,7 @@ function App() {
           <Layout 
             onLogout={() => handleLogin(false)} 
             userRole={userRole} 
+            userName={userName}
             onRoleChange={handleRoleChange} 
           /> : 
           <Navigate to="/login" replace />

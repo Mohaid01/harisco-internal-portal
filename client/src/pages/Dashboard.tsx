@@ -59,8 +59,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         fetch(`${API_BASE}/activity`, { headers }).then((r) => r.json()),
       ])
 
-      if (userRole === 'STAFF') {
-        // Staff only see their own repairs and procurements
+      if (userRole === 'Employee') {
+        // Employees only see their own repairs and procurements
         setStats({
           employees: 0,
           devices: 0,
@@ -68,8 +68,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
             .length, // Filter by requester later
           procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length, // Filter by requester later
         })
-        setAllActivities(act.filter((a: any) => a.performedBy?.includes('STAFF')))
-        setActivities(act.filter((a: any) => a.performedBy?.includes('STAFF')).slice(0, 6))
+        setAllActivities(act.filter((a: any) => a.performedBy?.includes('Employee')))
+        setActivities(act.filter((a: any) => a.performedBy?.includes('Employee')).slice(0, 6))
       } else {
         setStats({
           employees: emp.length,
@@ -79,8 +79,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length,
         })
 
-        // Admins can't see logs either, only IT/Director
-        if (userRole === 'IT' || userRole === 'DIRECTOR') {
+        // IT, Admin, and Manager see all logs
+        if (userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') {
           setAllActivities(act)
           setActivities(act.slice(0, 6))
         } else {
@@ -88,6 +88,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           setActivities([])
         }
       }
+
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
     } finally {

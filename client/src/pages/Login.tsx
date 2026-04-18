@@ -5,7 +5,7 @@ import Input from '../components/ui/Input';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LoginProps {
-  onLogin: (role: string) => void;
+  onLogin: (role: string, name: string) => void;
 }
 
 const API_BASE = 'http://localhost:5000/api';
@@ -20,54 +20,37 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [message, setMessage] = useState(location.state?.message || '');
 
   useEffect(() => {
+    // 1. Check for manual logout messages
     const storedMessage = sessionStorage.getItem('logoutMessage');
     if (storedMessage) {
       setMessage(storedMessage);
       sessionStorage.removeItem('logoutMessage');
     }
-  }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setError('');
+    // 2. Check for Google OAuth tokens or errors in the URL
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const role = params.get('role');
+    const name = params.get('name');
+    const urlError = params.get('error');
 
-    try {
-      const res = await fetch(`${API_BASE}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        
-        // Save the JWT token
-        localStorage.setItem('token', data.token);
-
-        // Log the activity (ensure we pass the token if the backend requires it now, but login might be exempt? Wait, /api/activity requires token!)
-        await fetch(`${API_BASE}/activity`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${data.token}`
-          },
-          body: JSON.stringify({ 
-            action: 'LOGIN', 
-            details: `User logged in: ${email}`,
-            performedBy: `${data.role} User`
-          }),
-        });
-        onLogin(data.role);
-        navigate('/dashboard');
-      } else {
-        setError('Invalid email or password.');
-      }
-    } catch (err) {
-      setError('Connection failed. Is the server running?');
-    } finally {
-      setIsLoggingIn(false);
+    if (urlError) {
+      setError(urlError);
     }
+
+    if (token && role) {
+      localStorage.setItem('token', token);
+      localStorage.setItem('userName', name || '');
+      onLogin(role, name || '');
+      navigate('/dashboard');
+    }
+
+  }, [location, navigate, onLogin]);
+
+
+  const handleGoogleLogin = () => {
+    // Redirect to backend OAuth route
+    window.location.href = 'http://localhost:5000/auth/google';
   };
 
   return (
@@ -86,52 +69,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="card !p-8 space-y-8">
-          <button type="button" onClick={handleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-3 px-4 rounded-lg font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg" width="18" height="18" alt="Google" />
-            Sign in with @harisco.com
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-lg text-sm text-red-800 flex items-center gap-3 shadow-sm">
+            <AlertCircle size={18} className="text-red-500 flex-shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+
+        <div className="card !p-8 space-y-6">
+          <button 
+            type="button" 
+            onClick={handleGoogleLogin} 
+            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-4 px-4 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg" width="20" height="20" alt="Google" />
+            Sign in with Google
+            <ArrowRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform ml-auto" />
           </button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-100"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-4 text-slate-400 font-bold tracking-widest">or admin access</span>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <Input 
-              label="Email Address" 
-              placeholder="admin@harisco.com" 
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={error}
-            />
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Password</label>
-              </div>
-              <input 
-                type="password" 
-                placeholder="admin123" 
-                className="input" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <Button 
-              type="submit" 
-              className="w-full flex items-center justify-center gap-2 group"
-              disabled={isLoggingIn}
-            >
-              {isLoggingIn ? 'Verifying...' : 'Access Portal'}
-              {!isLoggingIn && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
-            </Button>
-          </div>
-        </form>
+          <p className="text-[11px] text-center text-slate-400 px-4">
+            Authorized access only. Use your official @harisco.com or authorized Gmail account to log in.
+          </p>
+        </div>
 
         <p className="text-center text-xs text-slate-400 mt-8 flex items-center justify-center gap-2">
           <ShieldCheck size={14} />
@@ -141,5 +101,4 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     </div>
   );
 };
-
 export default Login;

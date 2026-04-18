@@ -9,7 +9,8 @@ interface ProcurementRequest {
   estimatedCost: string
   requester: string
   type: string
-  status: 'PENDING_IT' | 'PENDING_ADMIN' | 'PENDING_DIRECTOR' | 'APPROVED' | 'PURCHASED'
+  status: 'PENDING_IT' | 'PENDING_ADMIN' | 'PENDING_MANAGER' | 'APPROVED' | 'PURCHASED'
+
   createdAt: string
 }
 
@@ -150,8 +151,8 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
         return { label: 'IT Review', color: 'bg-blue-100 text-blue-700' }
       case 'PENDING_ADMIN':
         return { label: 'Admin Approval', color: 'bg-purple-100 text-purple-700' }
-      case 'PENDING_DIRECTOR':
-        return { label: 'Director Sign-off', color: 'bg-orange-100 text-orange-700' }
+      case 'PENDING_MANAGER':
+        return { label: 'Manager Sign-off', color: 'bg-orange-100 text-orange-700' }
       case 'APPROVED':
         return { label: 'Approved (To Purchase)', color: 'bg-green-100 text-green-700' }
       case 'PURCHASED':
@@ -165,7 +166,8 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-slate-800 text-lg">Asset Procurement</h3>
-        {userRole !== 'STAFF' && (
+        {userRole !== 'Employee' && (
+
           <Button onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
             <Plus size={18} />
             New Request
@@ -173,7 +175,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
         )}
       </div>
 
-      {userRole === 'STAFF' ? (
+      {userRole === 'Employee' ? (
         <div className="card flex flex-col items-center justify-center p-20 text-center space-y-4">
           <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
             <ShieldAlert size={32} />
@@ -181,10 +183,11 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
           <div>
             <h4 className="text-xl font-bold text-slate-900">Procurement Restricted</h4>
             <p className="text-slate-500 mt-2 max-w-sm">
-              Regular staff cannot initiate procurement directly from the portal. Please contact
-              your **Department Admin** or the **IT Manager** to request new hardware.
+              Regular employees cannot initiate procurement directly from the portal. Please contact
+              your **Admin** or **Manager** to request new hardware.
             </p>
           </div>
+
           <Button variant="secondary" className="mt-4">
             Learn More About Policy
           </Button>

@@ -14,13 +14,15 @@ import {
 interface LayoutProps {
   onLogout: () => void
   userRole: string
+  userName: string
   onRoleChange: (role: any) => void
 }
 
 const API_BASE = 'http://localhost:5000/api'
 const INACTIVITY_LIMIT = 1 * 60 * 1000 // 1 minute
 
-const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => {
+const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, onRoleChange }) => {
+
   const location = useLocation()
   const navigate = useNavigate()
   const [showNotifications, setShowNotifications] = useState(false)
@@ -115,19 +117,20 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
       icon: <Users size={20} />,
       label: 'Employees',
       path: '/employees',
-      roles: ['IT', 'DIRECTOR', 'ADMIN'],
+      roles: ['IT', 'Admin', 'Manager'],
     },
     {
       icon: <Smartphone size={20} />,
       label: 'Inventory',
       path: '/inventory',
-      roles: ['IT', 'DIRECTOR', 'ADMIN'],
+      roles: ['IT', 'Admin', 'Manager'],
     },
     { icon: <ShoppingCart size={20} />, label: 'Procurement', path: '/procurement' },
     { icon: <Wrench size={20} />, label: 'Repairs', path: '/repairs' },
   ]
 
   const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole))
+
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -181,7 +184,8 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
             {navItems.find((n) => n.path === location.pathname)?.label || 'Internal Portal'}
           </h2>
           <div className="flex items-center gap-4 relative">
-            {(userRole === 'IT' || userRole === 'DIRECTOR') && (
+            {(userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') && (
+
               <div className="relative" ref={notificationRef}>
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -229,7 +233,9 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
 
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-900 leading-tight">Current User</p>
+                <p className="text-sm font-bold text-slate-900 leading-tight">
+                  {userName || 'User'}
+                </p>
                 <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter text-harisco-blue">
                   {userRole} AUTHORITY
                 </p>
@@ -239,12 +245,13 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, onRoleChange }) => 
                 className="w-9 h-9 bg-harisco-blue text-white rounded-lg flex items-center justify-center font-bold shadow-sm hover:bg-red-600 transition-colors group relative"
                 title="Logout"
               >
-                <span>A</span>
+                <span>{(userName || 'U').charAt(0).toUpperCase()}</span>
                 <div className="absolute inset-0 bg-red-600 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                   <LogOut size={16} />
                 </div>
               </button>
             </div>
+
           </div>
         </header>
 

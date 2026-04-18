@@ -8,6 +8,9 @@ import { PrismaClient } from '@prisma/client';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { sendStatusEmail } from './utils/mailer.ts';
 
 dotenv.config();
@@ -22,6 +25,108 @@ const JWT_SECRET = process.env.JWT_SECRET || 'harisco_super_secret_dev_key';
 
 app.use(cors());
 app.use(express.json());
+
+// --- Session and Passport Configuration ---
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'harisco_session_secret',
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user: any, done) => done(null, user));
+passport.deserializeUser((user: any, done) => done(null, user));
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID || 'your_google_client_id',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'your_google_client_secret',
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/auth/google/callback',
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails?.[0].value;
+        if (!email) return done(new Error('No email found in Google profile'));
+
+        // Find user by email (from our seed)
+        let user = await prisma.user.findUnique({ where: { email } });
+
+        if (user) {
+          // Update user with googleId if not present
+          if (!user.googleId) {
+            user = await prisma.user.update({
+              where: { email },
+              data: { googleId: profile.id },
+            });
+          }
+          
+          // Log login activity
+          await prisma.activityLog.create({
+            data: {
+              action: 'LOGIN',
+              details: `User logged in via Google: ${email}`,
+              performedBy: `${user.role} User`,
+            },
+          });
+
+          return done(null, user);
+        } else {
+          // REJECT unknown emails as requested
+          console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
+          
+          await prisma.activityLog.create({
+            data: {
+              action: 'LOGIN_BLOCKED',
+              details: `Unauthorized login attempt blocked: ${email}`,
+              performedBy: 'System',
+            },
+          });
+
+          return done(null, false, { message: 'You are not allowed. Please contact IT.' });
+        }
+
+      } catch (error) {
+        return done(error);
+      }
+    }
+  )
+);
+
+
+// --- Google Auth Routes ---
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/google/callback', (req, res, next) => {
+  passport.authenticate('google', (err: any, user: any, info: any) => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    if (err) {
+      return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(err.message)}`);
+    }
+    if (!user) {
+      const message = info?.message || 'Authentication failed';
+      return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(message)}`);
+    }
+
+    // Success - sign token and redirect
+    const token = jwt.sign({ 
+      id: user.id, 
+      email: user.email, 
+      role: user.role,
+      name: user.name 
+    }, JWT_SECRET, {
+      expiresIn: '8h',
+    });
+    res.redirect(`${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}`);
+
+  })(req, res, next);
+});
+
 
 // --- Authentication Middleware ---
 export const authenticateToken = (req: any, res: any, next: any) => {
@@ -293,32 +398,8 @@ app.get('/api/activity', async (req, res) => {
   res.json(logs);
 });
 
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+// Legacy login removed - now using /auth/google
 
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: '8h',
-    });
-
-    res.json({ token, role: user.role });
-  } catch (error) {
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
 app.post('/api/activity', async (req, res) => {
   const { action, details, performedBy } = req.body;
   try {
