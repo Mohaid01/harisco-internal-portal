@@ -8,6 +8,7 @@ import Repairs from './pages/Repairs'
 import Procurement from './pages/Procurement'
 import Login from './pages/Login'
 import Users from './pages/Users'
+import Chat from './pages/Chat'
 
 export type UserRole = 'IT' | 'Admin' | 'Manager' | 'Employee'
 
@@ -19,14 +20,22 @@ function App() {
     (localStorage.getItem('userRole') as UserRole) || 'Manager',
   )
   const [userName, setUserName] = useState(localStorage.getItem('userName') || '')
+  const [userId, setUserId] = useState(localStorage.getItem('userId') || '')
 
-  const handleLogin = (status: boolean, role: UserRole = 'Manager', name: string = '') => {
+  const handleLogin = (
+    status: boolean,
+    role: UserRole = 'Manager',
+    name: string = '',
+    userId: string = '',
+  ) => {
     setIsAuthenticated(status)
     setUserRole(role)
     setUserName(name)
+    setUserId(userId)
     localStorage.setItem('isAuthenticated', String(status))
     localStorage.setItem('userRole', role)
     localStorage.setItem('userName', name)
+    localStorage.setItem('userId', userId)
   }
 
   const handleRoleChange = (role: UserRole) => {
@@ -44,7 +53,11 @@ function App() {
         <Route
           path="/login"
           element={
-            <Login onLogin={(role: UserRole, name: string) => handleLogin(true, role, name)} />
+            <Login
+              onLogin={(role: UserRole, name: string, id: string) =>
+                handleLogin(true, role, name, id)
+              }
+            />
           }
         />
 
@@ -57,6 +70,7 @@ function App() {
                 userRole={userRole}
                 userName={userName}
                 onRoleChange={handleRoleChange}
+                userId={userId}
               />
             ) : (
               <Navigate to="/login" replace />
@@ -68,12 +82,15 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="procurement" element={<Procurement userRole={userRole} />} />
           <Route path="repairs" element={<Repairs userRole={userRole} userName={userName} />} />
-          <Route 
-            path="users" 
-            element={userRole === 'IT' ? <Users /> : <Navigate to="/dashboard" replace />} 
+          <Route
+            path="users"
+            element={userRole === 'IT' ? <Users /> : <Navigate to="/dashboard" replace />}
+          />
+          <Route
+            path="chat"
+            element={<Chat userId={userId} userName={userName} userRole={userRole} />}
           />
         </Route>
-
 
         {/* Fallback */}
         <Route

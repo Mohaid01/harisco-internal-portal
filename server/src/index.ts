@@ -1,4 +1,6 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -28,6 +30,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*', // Adjust for production
+    methods: ['GET', 'POST'],
+  },
+});
 const prisma = new PrismaClient();
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
@@ -136,7 +145,7 @@ app.post('/api/auth/local', async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    res.json({ token, role: user.role, name: user.name || user.email });
+    res.json({ token, role: user.role, name: user.name || user.email, userId: user.id });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
   }
@@ -171,7 +180,7 @@ app.get('/auth/google/callback', (req, res, next) => {
       }
     );
     res.redirect(
-      `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}`
+      `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}&userId=${user.id}`
     );
   })(req, res, next);
 });
@@ -314,6 +323,138 @@ app.delete('/api/users/:id', authorizeRoles('IT'), async (req, res) => {
     res.json({ message: 'User removed successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove user' });
+  }
+});
+
+// --- Chat Routes ---
+
+app.get('/api/chat/users', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        NOT: { id: myId }
+      },
+      select: { id: true, email: true, name: true, role: true }
+    });
+
+    // Get unread counts for each user
+    const unreadCounts = await prisma.chatMessage.groupBy({
+      by: ['senderId'],
+      where: {
+        receiverId: myId,
+        isRead: false
+      },
+      _count: true
+    });
+
+    // Get last message timestamp for each user
+    const lastMessages = await prisma.chatMessage.findMany({
+      where: {
+        OR: [
+          { senderId: myId },
+          { receiverId: myId }
+        ]
+      },
+      orderBy: { timestamp: 'desc' }
+    });
+
+    const usersWithUnread = users.map(user => {
+      const unread = unreadCounts.find(c => c.senderId === user.id);
+      
+      // Find the latest message timestamp involving this specific user
+      const latestMsg = lastMessages.find(m => 
+        (m.senderId === user.id && m.receiverId === myId) || 
+        (m.senderId === myId && m.receiverId === user.id)
+      );
+
+      return {
+        ...user,
+        unreadCount: unread ? unread._count : 0,
+        lastMessageAt: latestMsg ? latestMsg.timestamp : null
+      };
+    });
+
+    res.json(usersWithUnread);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch chat users' });
+  }
+});
+
+app.get('/api/chat/history/:otherUserId', async (req: any, res) => {
+  const { otherUserId } = req.params;
+  const myId = req.user.id;
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        OR: [
+          { senderId: myId, receiverId: parseInt(otherUserId) },
+          { senderId: parseInt(otherUserId), receiverId: myId }
+        ]
+      },
+      orderBy: { timestamp: 'asc' }
+    });
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch chat history' });
+  }
+});
+
+app.post('/api/chat/read/:senderId', async (req: any, res) => {
+  const { senderId } = req.params;
+  const myId = req.user.id;
+  try {
+    await prisma.chatMessage.updateMany({
+      where: {
+        senderId: parseInt(senderId),
+        receiverId: myId,
+        isRead: false
+      },
+      data: { isRead: true }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update read status' });
+  }
+});
+
+app.get('/api/chat/unread-count', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const count = await prisma.chatMessage.count({
+      where: {
+        receiverId: myId,
+        isRead: false
+      }
+    });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch unread count' });
+  }
+});
+
+app.get('/api/chat/unread-messages', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        receiverId: myId,
+        isRead: false
+      },
+      include: {
+        sender: { select: { name: true, email: true } }
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 5
+    });
+    res.json(messages.map((m: any) => ({
+      id: `chat-${m.id}`,
+      details: `New message from ${m.sender.name || m.sender.email}: ${m.content}`,
+      timestamp: m.timestamp,
+      action: 'CHAT'
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch unread messages' });
   }
 });
 
@@ -601,8 +742,91 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// --- Socket.io Chat Implementation ---
+const userSockets = new Map<number, string>(); // userId -> socketId
+
+io.on('connection', (socket) => {
+  console.log(`[Socket] User connected: ${socket.id}`);
+
+  socket.on('register', (userId: any) => {
+    const id = typeof userId === 'string' ? parseInt(userId) : userId;
+    if (!isNaN(id)) {
+      userSockets.set(id, socket.id);
+      console.log(`[Socket] User ${id} registered to socket ${socket.id}`);
+    } else {
+      console.error(`[Socket] Invalid userId during registration: ${userId}`);
+    }
+  });
+
+  socket.on('send_message', async (data: { receiverId: any; content: string; senderId: any }) => {
+    try {
+      const senderId = typeof data.senderId === 'string' ? parseInt(data.senderId) : data.senderId;
+      const receiverId = typeof data.receiverId === 'string' ? parseInt(data.receiverId) : data.receiverId;
+
+      if (!senderId || !receiverId || isNaN(senderId) || isNaN(receiverId)) return;
+
+      const message = await prisma.chatMessage.create({
+        data: {
+          content: data.content,
+          senderId: senderId,
+          receiverId: receiverId,
+        },
+        include: {
+          sender: { select: { name: true, role: true } }
+        }
+      });
+
+      // Send to receiver if online
+      const receiverSocketId = userSockets.get(data.receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('receive_message', message);
+      }
+
+      // Send confirmation to sender
+      socket.emit('message_sent', message);
+    } catch (error) {
+      console.error('[Socket] Error saving message:', error);
+    }
+  });
+
+  socket.on('mark_read', async (data: { senderId: any; receiverId: any }) => {
+    try {
+      const senderId = typeof data.senderId === 'string' ? parseInt(data.senderId) : data.senderId;
+      const receiverId = typeof data.receiverId === 'string' ? parseInt(data.receiverId) : data.receiverId;
+
+      if (!senderId || !receiverId || isNaN(senderId) || isNaN(receiverId)) return;
+
+      await prisma.chatMessage.updateMany({
+        where: {
+          senderId: senderId,
+          receiverId: receiverId,
+          isRead: false
+        },
+        data: { isRead: true }
+      });
+      
+      const senderSocketId = userSockets.get(senderId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('messages_read', { byUserId: receiverId });
+      }
+    } catch (error) {
+      console.error('[Socket] Error marking messages as read:', error);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    for (const [userId, socketId] of userSockets.entries()) {
+      if (socketId === socket.id) {
+        userSockets.delete(userId);
+        break;
+      }
+    }
+    console.log(`[Socket] User disconnected: ${socket.id}`);
+  });
+});
+
 const BIND_IP = '0.0.0.0';
-app.listen(PORT, BIND_IP, () => {
+httpServer.listen(PORT, BIND_IP, () => {
   console.log(`🚀 Server running on http://${BIND_IP}:${PORT}`);
   console.log(`📂 Database: ${DB_PATH}`);
   console.log(`💾 Backups: ${BACKUP_DIR}`);

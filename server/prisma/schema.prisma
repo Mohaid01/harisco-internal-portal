@@ -15,6 +15,22 @@ model User {
   role      String   @default("Employee") // IT, Admin, Manager, Employee
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations for Chat
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  receivedMessages ChatMessage[] @relation("ReceivedMessages")
+}
+
+model ChatMessage {
+  id          Int      @id @default(autoincrement())
+  content     String
+  senderId    Int
+  receiverId  Int
+  timestamp   DateTime @default(now())
+  isRead      Boolean  @default(false)
+
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }
 
 model Employee {

@@ -183,7 +183,7 @@ const Users: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {new Date(user.createdAt).toLocaleDateString()}
+                      {new Date(user.createdAt).toLocaleDateString('en-US', { timeZone: 'Asia/Karachi' })}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
