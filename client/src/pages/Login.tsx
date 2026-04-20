@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { AUTH_BASE, API_BASE } from '../config'
 
 interface LoginProps {
-  onLogin: (role: any, name: string) => void
+  onLogin: (role: any, name: string, userId: string) => void
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -28,7 +28,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       if (res.ok) {
         localStorage.setItem('token', data.token)
         localStorage.setItem('userName', data.name || '')
-        onLogin(data.role, data.name || '')
+        localStorage.setItem('userId', String(data.userId))
+        onLogin(data.role, data.name || '', String(data.userId))
         navigate('/dashboard')
       } else {
         setError(data.error || 'Login failed')
@@ -51,16 +52,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const token = params.get('token')
     const role = params.get('role')
     const name = params.get('name')
+    const userId = params.get('userId')
     const urlError = params.get('error')
 
     if (urlError) {
       setError(urlError)
     }
 
-    if (token && role) {
+    if (token && role && userId) {
       localStorage.setItem('token', token)
       localStorage.setItem('userName', name || '')
-      onLogin(role, name || '')
+      localStorage.setItem('userId', userId)
+      onLogin(role, name || '', userId)
       navigate('/dashboard')
     }
   }, [location, navigate, onLogin])

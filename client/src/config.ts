@@ -4,5 +4,6 @@ const isDev = import.meta.env?.DEV;
 
 export const API_BASE = isDev ? 'http://localhost:5000/api' : `http://portal.harisco.com:8080/api`;
 export const AUTH_BASE = isDev ? 'http://localhost:5000/auth/google' : `http://portal.harisco.com:8080/auth/google`;
+export const WS_URL = isDev ? 'http://localhost:5000' : 'http://portal.harisco.com:8080';
 
 console.log("📍 HarisCo Portal Office Config:", { API_BASE, AUTH_BASE });
