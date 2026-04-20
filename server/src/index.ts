@@ -47,6 +47,52 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
+// --- Backup Service ---
+
+const DB_PATH = path.join(__dirname, '../prisma/dev.db');
+const BACKUP_DIR = path.join(__dirname, '../backups');
+
+if (!fs.existsSync(BACKUP_DIR)) {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+}
+
+const triggerBackup = async () => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
+
+    if (fs.existsSync(DB_PATH)) {
+      fs.copyFileSync(DB_PATH, backupPath);
+      console.log(`[Backup] Activity-triggered backup created: ${backupPath}`);
+
+      // Cleanup: Keep only last 10 activity-based backups
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('backup-'));
+      if (files.length > 10) {
+        const sortedFiles = files.sort((a, b) => {
+          return (
+            fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
+            fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
+          );
+        });
+        fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
+        console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
+      }
+    }
+  } catch (error) {
+    console.error('[Backup] Failed to create triggered backup:', error);
+  }
+};
+
+// --- Activity Logger Helper ---
+const logActivity = async (action: string, details: string, performedBy: string = 'System') => {
+  await prisma.activityLog.create({
+    data: { action, details, performedBy },
+  });
+
+  // Trigger backup on every system change/log
+  await triggerBackup();
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, '../public/uploads');
@@ -123,26 +169,14 @@ passport.use(
           });
 
           // Log login activity
-          await prisma.activityLog.create({
-            data: {
-              action: 'LOGIN',
-              details: `User logged in via Google: ${email}`,
-              performedBy: `${user.role} User: ${officialName}`,
-            },
-          });
+          await logActivity('LOGIN', `User logged in via Google: ${email}`, officialName);
 
           return done(null, user);
         } else {
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
 
-          await prisma.activityLog.create({
-            data: {
-              action: 'LOGIN_BLOCKED',
-              details: `Unauthorized login attempt blocked: ${email}`,
-              performedBy: 'System',
-            },
-          });
+          await logActivity('LOGIN_BLOCKED', `Unauthorized login attempt blocked: ${email}`, 'System');
 
           return done(null, false, { message: 'You are not allowed. Please contact IT.' });
         }
@@ -173,6 +207,7 @@ app.post('/api/auth/local', async (req, res) => {
       { expiresIn: '8h' }
     );
 
+    await logActivity('LOGIN', `User logged in via local dev bypass: ${user.email}`, user.name || user.email);
     res.json({ token, role: user.role, name: user.name || user.email, userId: user.id });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
@@ -239,51 +274,7 @@ const authorizeRoles = (...allowedRoles: string[]) => {
 // ... inside API routes section ...
 // These will be added after the authenticateToken middleware is applied to /api
 
-// --- Backup Service ---
 
-const DB_PATH = path.join(__dirname, '../prisma/dev.db');
-const BACKUP_DIR = path.join(__dirname, '../backups');
-
-if (!fs.existsSync(BACKUP_DIR)) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-}
-
-const triggerBackup = async () => {
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
-
-    if (fs.existsSync(DB_PATH)) {
-      fs.copyFileSync(DB_PATH, backupPath);
-      console.log(`[Backup] Activity-triggered backup created: ${backupPath}`);
-
-      // Cleanup: Keep only last 10 activity-based backups
-      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('backup-'));
-      if (files.length > 10) {
-        const sortedFiles = files.sort((a, b) => {
-          return (
-            fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
-            fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
-          );
-        });
-        fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
-        console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
-      }
-    }
-  } catch (error) {
-    console.error('[Backup] Failed to create triggered backup:', error);
-  }
-};
-
-// --- Activity Logger Helper ---
-const logActivity = async (action: string, details: string, performedBy: string = 'Admin') => {
-  await prisma.activityLog.create({
-    data: { action, details, performedBy },
-  });
-
-  // Trigger backup on every system change/log
-  await triggerBackup();
-};
 
 // Manual backup endpoint (optional)
 app.post('/api/admin/backup', (req, res) => {
@@ -498,13 +489,13 @@ app.get('/api/employees', async (req: any, res) => {
   res.json(employees);
 });
 
-app.post('/api/employees', async (req, res) => {
+app.post('/api/employees', async (req: any, res) => {
   const { name, email, department, designation, cnic, phoneNumber } = req.body;
   try {
     const employee = await prisma.employee.create({
       data: { name, email, department, designation, cnic, phoneNumber },
     });
-    await logActivity('CREATE_EMPLOYEE', `Added employee: ${name} (${email})`);
+    await logActivity('CREATE_EMPLOYEE', `Added employee: ${name} (${email})`, req.user?.name);
     res.json(employee);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create employee' });
@@ -529,13 +520,13 @@ app.get('/api/inventory', async (req: any, res) => {
   res.json(devices);
 });
 
-app.post('/api/inventory', async (req, res) => {
+app.post('/api/inventory', async (req: any, res) => {
   const { serial, model, type, status } = req.body;
   try {
     const device = await prisma.device.create({
       data: { serial, model, type, status },
     });
-    await logActivity('CREATE_DEVICE', `Added device: ${model} [${serial}]`);
+    await logActivity('CREATE_DEVICE', `Added device: ${model} [${serial}]`, req.user?.name);
     res.json(device);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create device' });
@@ -556,7 +547,7 @@ app.put('/api/inventory/:id', async (req, res) => {
   }
 });
 
-app.post('/api/inventory/:id/issue', async (req, res) => {
+app.post('/api/inventory/:id/issue', async (req: any, res) => {
   const { id } = req.params;
   const { assignedTo } = req.body;
   try {
@@ -564,7 +555,7 @@ app.post('/api/inventory/:id/issue', async (req, res) => {
       where: { id: parseInt(id) },
       data: { status: 'ISSUED', assignedTo },
     });
-    await logActivity('ISSUE_DEVICE', `Issued device ID ${id} to ${assignedTo}`);
+    await logActivity('ISSUE_DEVICE', `Issued device ID ${id} to ${assignedTo}`, req.user?.name);
     res.json(device);
   } catch (error) {
     res.status(500).json({ error: 'Failed to issue device' });
@@ -589,7 +580,7 @@ app.post('/api/procurement', async (req, res) => {
     const procurement = await prisma.procurement.create({
       data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
     });
-    await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`);
+    await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`, req.user?.name);
 
     // Notify all IT users
     const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
@@ -614,7 +605,7 @@ app.post('/api/procurement', async (req, res) => {
   }
 });
 
-app.patch('/api/procurement/:id/status', async (req, res) => {
+app.patch('/api/procurement/:id/status', async (req: any, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
@@ -622,7 +613,7 @@ app.patch('/api/procurement/:id/status', async (req, res) => {
       where: { id: parseInt(id) },
       data: { status },
     });
-    await logActivity('UPDATE_PROCUREMENT_STATUS', `Updated PRQ-${id} to ${status}`);
+    await logActivity('UPDATE_PROCUREMENT_STATUS', `Updated PRQ-${id} to ${status}`, req.user?.name);
 
     // Send email notification
     await sendStatusEmail(
@@ -637,7 +628,7 @@ app.patch('/api/procurement/:id/status', async (req, res) => {
   }
 });
 
-app.post('/api/procurement/:id/intake', async (req, res) => {
+app.post('/api/procurement/:id/intake', async (req: any, res) => {
   const { id } = req.params;
   const { serial, model, type } = req.body;
   try {
@@ -652,7 +643,7 @@ app.post('/api/procurement/:id/intake', async (req, res) => {
       data: { status: 'PURCHASED' },
     });
 
-    await logActivity('PROCUREMENT_INTAKE', `Stocked ${model} [${serial}] from PRQ-${id}`);
+    await logActivity('PROCUREMENT_INTAKE', `Stocked ${model} [${serial}] from PRQ-${id}`, req.user?.name);
     res.json({ device, request });
   } catch (error) {
     res.status(500).json({ error: 'Failed to process intake' });
@@ -739,7 +730,7 @@ app.post('/api/repairs', async (req: any, res) => {
   }
 });
 
-app.patch('/api/repairs/:id/status', async (req, res) => {
+app.patch('/api/repairs/:id/status', async (req: any, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
@@ -748,7 +739,7 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
       data: { status },
       include: { device: true },
     });
-    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to ${status}`);
+    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to ${status}`, req.user?.name);
 
     // Send email notification
     await sendStatusEmail(
@@ -763,7 +754,7 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
   }
 });
 
-app.patch('/api/repairs/:id/in-repair', async (req, res) => {
+app.patch('/api/repairs/:id/in-repair', async (req: any, res) => {
   const { id } = req.params;
   try {
     const repair = await prisma.repair.update({
@@ -771,7 +762,7 @@ app.patch('/api/repairs/:id/in-repair', async (req, res) => {
       data: { status: 'IN_REPAIR' },
       include: { device: true },
     });
-    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to IN_REPAIR`);
+    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to IN_REPAIR`, req.user?.name);
     res.json(repair);
   } catch (error) {
     res.status(500).json({ error: 'Failed to mark as in-repair' });
@@ -818,7 +809,7 @@ app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: 
       data: { status: 'ISSUED' },
     });
 
-    await logActivity('REPAIR_RESOLVED', `Resolved REP-${id} via ${repairType}`);
+    await logActivity('REPAIR_RESOLVED', `Resolved REP-${id} via ${repairType}`, req.user?.name);
     res.json(repair);
   } catch (error) {
     console.error(error);
@@ -881,7 +872,7 @@ app.post('/api/activity', async (req, res) => {
   const { action, details, performedBy } = req.body;
   try {
     const log = await prisma.activityLog.create({
-      data: { action, details, performedBy: performedBy || 'Admin' },
+      data: { action, details, performedBy: performedBy || 'System' },
     });
     res.json(log);
   } catch (error) {

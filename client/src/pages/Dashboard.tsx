@@ -273,8 +273,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                           {formatRelativeTime(act.timestamp)}
                         </span>
                       </div>
-                      <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1">
-                        Performed by: {act.performedBy || 'System'}
+                      <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1 opacity-70">
+                        {act.details.toLowerCase().includes('inactivity') || act.details.toLowerCase().includes('auto') 
+                          ? `Auto Performed by: ${act.performedBy || 'System'}`
+                          : `Performed by: ${act.performedBy || 'System'}`}
                       </p>
                     </div>
                   </div>

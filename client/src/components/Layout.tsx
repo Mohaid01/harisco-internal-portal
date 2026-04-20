@@ -69,7 +69,11 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: 'LOGOUT', details: reason }),
+        body: JSON.stringify({ 
+          action: 'LOGOUT', 
+          details: reason,
+          performedBy: userName
+        }),
       })
     } catch (e) {}
 
