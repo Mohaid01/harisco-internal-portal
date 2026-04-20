@@ -129,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-4 px-4 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group text-center no-underline"
             >
               <img
-                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg"
+                src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg"
                 width="20"
                 height="20"
                 alt="Google"
