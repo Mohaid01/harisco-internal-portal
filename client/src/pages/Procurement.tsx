@@ -42,7 +42,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     try {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setRequests(data)
@@ -62,9 +62,9 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           item,
@@ -90,9 +90,9 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement/${id}/status`, {
         method: 'PATCH',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
       })
@@ -112,9 +112,9 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/procurement/${selectedRequest.id}/intake`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           serial: intakeSerial,
@@ -139,8 +139,8 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
 
   const canApprove = (status: string) => {
     if (userRole === 'IT' && status === 'PENDING_IT') return true
-    if (userRole === 'ADMIN' && status === 'PENDING_ADMIN') return true
-    if (userRole === 'DIRECTOR' && (status === 'PENDING_DIRECTOR' || status === 'APPROVED'))
+    if (userRole === 'Admin' && status === 'PENDING_ADMIN') return true
+    if (userRole === 'Manager' && (status === 'PENDING_MANAGER' || status === 'APPROVED'))
       return true
     return false
   }
@@ -167,7 +167,6 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-slate-800 text-lg">Asset Procurement</h3>
         {userRole !== 'Employee' && (
-
           <Button onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
             <Plus size={18} />
             New Request
@@ -273,7 +272,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                         <CheckCircle2 size={14} />
                         This request is approved. Proceed to intake the new asset.
                       </p>
-                      {userRole === 'DIRECTOR' || userRole === 'ADMIN' ? (
+                      {userRole === 'Manager' || userRole === 'Admin' ? (
                         <Button
                           onClick={() => {
                             setIntakeModel(selectedRequest.item)
@@ -286,7 +285,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                         </Button>
                       ) : (
                         <p className="text-[10px] text-slate-400 italic mt-2">
-                          Only Admin/Director can finalize intake.
+                          Only Admin/Manager can finalize intake.
                         </p>
                       )}
                     </div>
@@ -311,7 +310,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                               const stages = [
                                 'PENDING_IT',
                                 'PENDING_ADMIN',
-                                'PENDING_DIRECTOR',
+                                'PENDING_MANAGER',
                                 'APPROVED',
                               ]
                               const next = stages[stages.indexOf(selectedRequest.status) + 1]

@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import multer from 'multer';
 import { sendStatusEmail } from './utils/mailer.ts';
 
 declare global {
@@ -44,6 +45,80 @@ const JWT_SECRET = process.env.JWT_SECRET || 'harisco_super_secret_dev_key';
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+
+// --- Backup Service ---
+
+const DB_PATH = path.join(__dirname, '../prisma/dev.db');
+const BACKUP_DIR = path.join(__dirname, '../backups');
+
+if (!fs.existsSync(BACKUP_DIR)) {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+}
+
+const triggerBackup = async () => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
+
+    if (fs.existsSync(DB_PATH)) {
+      fs.copyFileSync(DB_PATH, backupPath);
+      console.log(`[Backup] Activity-triggered backup created: ${backupPath}`);
+
+      // Cleanup: Keep only last 10 activity-based backups
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('backup-'));
+      if (files.length > 10) {
+        const sortedFiles = files.sort((a, b) => {
+          return (
+            fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
+            fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
+          );
+        });
+        fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
+        console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
+      }
+    }
+  } catch (error) {
+    console.error('[Backup] Failed to create triggered backup:', error);
+  }
+};
+
+// --- Activity Logger Helper ---
+const logActivity = async (action: string, details: string, performedBy?: string | null) => {
+  const actor = performedBy || 'System';
+  await prisma.activityLog.create({
+    data: { action, details, performedBy: actor },
+  });
+
+  // Trigger backup on every system change/log
+  await triggerBackup();
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `receipt-${Date.now()}${ext}`);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and PDFs are allowed'));
+    }
+  }
+});
 
 // --- Session and Passport Configuration ---
 app.use(
@@ -95,26 +170,14 @@ passport.use(
           });
 
           // Log login activity
-          await prisma.activityLog.create({
-            data: {
-              action: 'LOGIN',
-              details: `User logged in via Google: ${email}`,
-              performedBy: `${user.role} User: ${officialName}`,
-            },
-          });
+          await logActivity('LOGIN', `User logged in via Google: ${email}`, officialName);
 
           return done(null, user);
         } else {
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
 
-          await prisma.activityLog.create({
-            data: {
-              action: 'LOGIN_BLOCKED',
-              details: `Unauthorized login attempt blocked: ${email}`,
-              performedBy: 'System',
-            },
-          });
+          await logActivity('LOGIN_BLOCKED', `Unauthorized login attempt blocked: ${email}`, 'System');
 
           return done(null, false, { message: 'You are not allowed. Please contact IT.' });
         }
@@ -145,6 +208,7 @@ app.post('/api/auth/local', async (req, res) => {
       { expiresIn: '8h' }
     );
 
+    await logActivity('LOGIN', `User logged in via local dev bypass: ${user.email}`, user.name || user.email);
     res.json({ token, role: user.role, name: user.name || user.email, userId: user.id });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
@@ -211,51 +275,7 @@ const authorizeRoles = (...allowedRoles: string[]) => {
 // ... inside API routes section ...
 // These will be added after the authenticateToken middleware is applied to /api
 
-// --- Backup Service ---
 
-const DB_PATH = path.join(__dirname, '../prisma/dev.db');
-const BACKUP_DIR = path.join(__dirname, '../backups');
-
-if (!fs.existsSync(BACKUP_DIR)) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-}
-
-const triggerBackup = async () => {
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
-
-    if (fs.existsSync(DB_PATH)) {
-      fs.copyFileSync(DB_PATH, backupPath);
-      console.log(`[Backup] Activity-triggered backup created: ${backupPath}`);
-
-      // Cleanup: Keep only last 10 activity-based backups
-      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('backup-'));
-      if (files.length > 10) {
-        const sortedFiles = files.sort((a, b) => {
-          return (
-            fs.statSync(path.join(BACKUP_DIR, a)).birthtimeMs -
-            fs.statSync(path.join(BACKUP_DIR, b)).birthtimeMs
-          );
-        });
-        fs.unlinkSync(path.join(BACKUP_DIR, sortedFiles[0]));
-        console.log(`[Backup] Cleaned up oldest backup: ${sortedFiles[0]}`);
-      }
-    }
-  } catch (error) {
-    console.error('[Backup] Failed to create triggered backup:', error);
-  }
-};
-
-// --- Activity Logger Helper ---
-const logActivity = async (action: string, details: string, performedBy: string = 'Admin') => {
-  await prisma.activityLog.create({
-    data: { action, details, performedBy },
-  });
-
-  // Trigger backup on every system change/log
-  await triggerBackup();
-};
 
 // Manual backup endpoint (optional)
 app.post('/api/admin/backup', (req, res) => {
@@ -470,13 +490,13 @@ app.get('/api/employees', async (req: any, res) => {
   res.json(employees);
 });
 
-app.post('/api/employees', async (req, res) => {
+app.post('/api/employees', async (req: any, res) => {
   const { name, email, department, designation, cnic, phoneNumber } = req.body;
   try {
     const employee = await prisma.employee.create({
       data: { name, email, department, designation, cnic, phoneNumber },
     });
-    await logActivity('CREATE_EMPLOYEE', `Added employee: ${name} (${email})`);
+    await logActivity('CREATE_EMPLOYEE', `Added employee: ${name} (${email})`, req.user?.name);
     res.json(employee);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create employee' });
@@ -501,13 +521,13 @@ app.get('/api/inventory', async (req: any, res) => {
   res.json(devices);
 });
 
-app.post('/api/inventory', async (req, res) => {
+app.post('/api/inventory', async (req: any, res) => {
   const { serial, model, type, status } = req.body;
   try {
     const device = await prisma.device.create({
       data: { serial, model, type, status },
     });
-    await logActivity('CREATE_DEVICE', `Added device: ${model} [${serial}]`);
+    await logActivity('CREATE_DEVICE', `Added device: ${model} [${serial}]`, req.user?.name);
     res.json(device);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create device' });
@@ -528,7 +548,7 @@ app.put('/api/inventory/:id', async (req, res) => {
   }
 });
 
-app.post('/api/inventory/:id/issue', async (req, res) => {
+app.post('/api/inventory/:id/issue', async (req: any, res) => {
   const { id } = req.params;
   const { assignedTo } = req.body;
   try {
@@ -536,7 +556,7 @@ app.post('/api/inventory/:id/issue', async (req, res) => {
       where: { id: parseInt(id) },
       data: { status: 'ISSUED', assignedTo },
     });
-    await logActivity('ISSUE_DEVICE', `Issued device ID ${id} to ${assignedTo}`);
+    await logActivity('ISSUE_DEVICE', `Issued device ID ${id} to ${assignedTo}`, req.user?.name);
     res.json(device);
   } catch (error) {
     res.status(500).json({ error: 'Failed to issue device' });
@@ -561,7 +581,7 @@ app.post('/api/procurement', async (req, res) => {
     const procurement = await prisma.procurement.create({
       data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
     });
-    await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`);
+    await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`, req.user?.name);
 
     // Notify all IT users
     const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
@@ -586,7 +606,7 @@ app.post('/api/procurement', async (req, res) => {
   }
 });
 
-app.patch('/api/procurement/:id/status', async (req, res) => {
+app.patch('/api/procurement/:id/status', async (req: any, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
@@ -594,7 +614,7 @@ app.patch('/api/procurement/:id/status', async (req, res) => {
       where: { id: parseInt(id) },
       data: { status },
     });
-    await logActivity('UPDATE_PROCUREMENT_STATUS', `Updated PRQ-${id} to ${status}`);
+    await logActivity('UPDATE_PROCUREMENT_STATUS', `Updated PRQ-${id} to ${status}`, req.user?.name);
 
     // Send email notification
     await sendStatusEmail(
@@ -609,7 +629,7 @@ app.patch('/api/procurement/:id/status', async (req, res) => {
   }
 });
 
-app.post('/api/procurement/:id/intake', async (req, res) => {
+app.post('/api/procurement/:id/intake', async (req: any, res) => {
   const { id } = req.params;
   const { serial, model, type } = req.body;
   try {
@@ -624,7 +644,7 @@ app.post('/api/procurement/:id/intake', async (req, res) => {
       data: { status: 'PURCHASED' },
     });
 
-    await logActivity('PROCUREMENT_INTAKE', `Stocked ${model} [${serial}] from PRQ-${id}`);
+    await logActivity('PROCUREMENT_INTAKE', `Stocked ${model} [${serial}] from PRQ-${id}`, req.user?.name);
     res.json({ device, request });
   } catch (error) {
     res.status(500).json({ error: 'Failed to process intake' });
@@ -711,7 +731,7 @@ app.post('/api/repairs', async (req: any, res) => {
   }
 });
 
-app.patch('/api/repairs/:id/status', async (req, res) => {
+app.patch('/api/repairs/:id/status', async (req: any, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
@@ -720,7 +740,7 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
       data: { status },
       include: { device: true },
     });
-    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to ${status}`);
+    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to ${status}`, req.user?.name);
 
     // Send email notification
     await sendStatusEmail(
@@ -735,10 +755,106 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
   }
 });
 
+app.patch('/api/repairs/:id/in-repair', async (req: any, res) => {
+  const { id } = req.params;
+  try {
+    const repair = await prisma.repair.update({
+      where: { id: parseInt(id) },
+      data: { status: 'IN_REPAIR' },
+      include: { device: true },
+    });
+    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to IN_REPAIR`, req.user?.name);
+    res.json(repair);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark as in-repair' });
+  }
+});
+
+app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: any, res: any) => {
+  const { id } = req.params;
+  const { repairType, fixDetails, partsReplaced, vendorName, vendorContact, repairCost } = req.body;
+  
+  if (!repairType || !fixDetails) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (repairType === 'VENDOR' && (!vendorName || !vendorContact || !repairCost)) {
+    return res.status(400).json({ error: 'Missing required vendor fields' });
+  }
+
+  try {
+    const receiptUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    if (repairType === 'VENDOR' && !receiptUrl) {
+      return res.status(400).json({ error: 'Vendor repair requires a receipt upload' });
+    }
+
+    const repair = await prisma.repair.update({
+      where: { id: parseInt(id) },
+      data: {
+        status: 'RESOLVED',
+        repairType,
+        fixDetails,
+        partsReplaced: partsReplaced || null,
+        vendorName: vendorName || null,
+        vendorContact: vendorContact || null,
+        repairCost: repairCost || null,
+        receiptUrl,
+        resolvedAt: new Date(),
+      },
+    });
+
+    // Update the device status back to ISSUED
+    await prisma.device.update({
+      where: { id: repair.deviceId },
+      data: { status: 'ISSUED' },
+    });
+
+    await logActivity('REPAIR_RESOLVED', `Resolved REP-${id} via ${repairType}`, req.user?.name);
+    res.json(repair);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to resolve repair' });
+  }
+});
+
 app.get('/api/activity', async (req: any, res) => {
   if (req.user.role === 'Employee') {
+    const userName = req.user.name || '';
+    const userEmail = req.user.email || '';
+    const identifiers = [userName, userEmail].filter(i => i && i.length > 0);
+    
+    // Get all identifiers relevant to the employee
+    const repairs = await prisma.repair.findMany({ 
+      where: { requester: { in: identifiers } }, 
+      select: { id: true } 
+    });
+    const procs = await prisma.procurement.findMany({ 
+      where: { requester: { in: identifiers } }, 
+      select: { id: true } 
+    });
+    const devices = await prisma.device.findMany({ 
+      where: { assignedTo: { in: identifiers } }, 
+      select: { serial: true } 
+    });
+
+    const orConditions: any[] = [
+      { performedBy: { in: identifiers } }
+    ];
+
+    // Add fallback for name/email in details (to catch "Added employee: John Doe" etc)
+    identifiers.forEach(id => {
+      orConditions.push({ details: { contains: id } });
+    });
+
+    repairs.forEach(r => orConditions.push({ details: { contains: `REP-${r.id}` } }));
+    procs.forEach(p => orConditions.push({ details: { contains: `PRQ-${p.id}` } }));
+    devices.forEach(d => {
+      if (d.serial) orConditions.push({ details: { contains: d.serial } });
+    });
+
     const logs = await prisma.activityLog.findMany({
-      where: { performedBy: req.user.name || req.user.email },
+      where: { OR: orConditions },
       orderBy: { timestamp: 'desc' },
       take: 20,
     });
@@ -757,7 +873,7 @@ app.post('/api/activity', async (req, res) => {
   const { action, details, performedBy } = req.body;
   try {
     const log = await prisma.activityLog.create({
-      data: { action, details, performedBy: performedBy || 'Admin' },
+      data: { action, details, performedBy: performedBy || 'System' },
     });
     res.json(log);
   } catch (error) {
