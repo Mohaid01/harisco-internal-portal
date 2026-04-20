@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -16,6 +16,7 @@ import { io, Socket } from 'socket.io-client'
 import { API_BASE, WS_URL } from '../config'
 import { useLoading } from '../context/LoadingContext'
 import { useTheme } from '../context/ThemeContext'
+import NotificationPanel from './NotificationPanel'
 
 interface LayoutProps {
   onLogout: () => void
@@ -32,6 +33,9 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
   const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   // Auto-logout Logic
   useEffect(() => {
@@ -100,8 +104,53 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
     }
   }
 
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const [notifsRes, countRes] = await Promise.all([
+        fetch(`${API_BASE}/notifications`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      const [notifs, count] = await Promise.all([notifsRes.json(), countRes.json()])
+      setNotifications(Array.isArray(notifs) ? notifs : [])
+      setUnreadNotifCount(count.count || 0)
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error)
+    }
+  }, [])
+
+  const handleMarkRead = async (id: number) => {
+    try {
+      const token = localStorage.getItem('token')
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n))
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Failed to mark notification read:', error)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+      setUnreadNotifCount(0)
+    } catch (error) {
+      console.error('Failed to mark all read:', error)
+    }
+  }
+
   useEffect(() => {
     fetchUnreadCount()
+    fetchNotifications()
 
     const socket: Socket = io(WS_URL)
     socket.on('connect', () => {
@@ -112,6 +161,11 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
       fetchUnreadCount()
     })
 
+    socket.on('notification', (notif: any) => {
+      setNotifications((prev) => [notif, ...prev])
+      setUnreadNotifCount((prev) => prev + 1)
+    })
+
     return () => {
       socket.disconnect()
     }
@@ -119,7 +173,11 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
 
   useEffect(() => {
     fetchUnreadCount()
-    const interval = setInterval(fetchUnreadCount, 60000)
+    fetchNotifications()
+    const interval = setInterval(() => {
+      fetchUnreadCount()
+      fetchNotifications()
+    }, 60000)
     return () => clearInterval(interval)
   }, [location.pathname])
 
@@ -235,6 +293,15 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
             >
               {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             </button>
+
+            <NotificationPanel
+              notifications={notifications}
+              unreadCount={unreadNotifCount}
+              isOpen={notifOpen}
+              onToggle={() => setNotifOpen((v) => !v)}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
+            />
 
             <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
 

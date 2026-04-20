@@ -12,6 +12,8 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import multer from 'multer';
+import { notify, notifyRole } from './notify.js';
+import { generateDailyDigest } from './digest.js';
 
 declare global {
   namespace Express {
@@ -250,6 +252,9 @@ app.get('/auth/google/callback', (req, res, next) => {
         expiresIn: '8h',
       }
     );
+    // Fire-and-forget digest (does not block redirect)
+    generateDailyDigest(prisma, io, userSockets, user).catch(console.error);
+
     res.redirect(
       `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}&userId=${user.id}`
     );
@@ -580,6 +585,21 @@ app.post('/api/inventory/:id/issue', async (req: any, res) => {
       data: { status: 'ISSUED', assignedTo },
     });
     await logActivity('ISSUE_DEVICE', `Issued device ID ${id} to ${assignedTo}`, req.user?.name);
+
+    // Notify the assigned user
+    const assignedUser = await prisma.user.findFirst({
+      where: { OR: [{ name: assignedTo }, { email: assignedTo }] },
+    });
+    if (assignedUser) {
+      await notify(prisma, io, userSockets, {
+        userId: assignedUser.id,
+        type: 'DEVICE_ASSIGNED',
+        title: 'A Device Has Been Assigned To You',
+        message: `${device.model} [${device.serial}] has been issued to you by ${req.user?.name || 'IT'}.`,
+        link: '/inventory',
+      });
+    }
+
     res.json(device);
   } catch (error) {
     res.status(500).json({ error: 'Failed to issue device' });
@@ -605,7 +625,7 @@ app.get('/api/procurement', async (req: any, res) => {
   res.json(synthesized);
 });
 
-app.post('/api/procurement', async (req, res) => {
+app.post('/api/procurement', async (req: any, res) => {
   const { item, requestedBy, reason, type } = req.body;
   try {
     const procurement = await prisma.procurement.create({
@@ -616,6 +636,14 @@ app.post('/api/procurement', async (req, res) => {
       `Requested: ${item} (Reason: ${reason})`,
       req.user?.name
     );
+
+    // Notify IT that approval is required
+    await notifyRole(prisma, io, userSockets, ['IT'], {
+      type: 'APPROVAL_REQUIRED',
+      title: 'Procurement Approval Required',
+      message: `${req.user?.name || requestedBy} requested ${item}. Your sign-off is needed.`,
+      link: '/procurement',
+    });
 
     res.json(procurement);
   } catch (error) {
@@ -671,6 +699,45 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
       req.user?.name
     );
 
+    // Notify remaining approvers or requester
+    const requesterUser = await prisma.user.findFirst({
+      where: { OR: [{ name: current.requestedBy }, { email: current.requestedBy }] },
+    });
+
+    if (action === 'REJECT') {
+      if (requesterUser) {
+        await notify(prisma, io, userSockets, {
+          userId: requesterUser.id,
+          type: 'REQUEST_UPDATED',
+          title: 'Procurement Request Rejected',
+          message: `Your request for "${current.item}" was rejected by ${req.user.name}.`,
+          link: '/procurement',
+        });
+      }
+    } else if (updateData.status === 'APPROVED') {
+      // Fully approved
+      if (requesterUser) {
+        await notify(prisma, io, userSockets, {
+          userId: requesterUser.id,
+          type: 'REQUEST_UPDATED',
+          title: 'Procurement Fully Approved',
+          message: `Your request for "${current.item}" has been fully approved.`,
+          link: '/procurement',
+        });
+      }
+    } else {
+      // Partial approval — notify next roles
+      const nextRoles = !request.itApproved ? ['IT']
+        : !request.adminApproved ? ['Admin']
+        : ['Manager'];
+      await notifyRole(prisma, io, userSockets, nextRoles, {
+        type: 'APPROVAL_REQUIRED',
+        title: 'Procurement Needs Your Signature',
+        message: `PRQ-${id}: "${current.item}" is waiting for your sign-off.`,
+        link: '/procurement',
+      });
+    }
+
     res.json(request);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update status' });
@@ -717,6 +784,21 @@ app.post(
         `Issued ${model} [${serial}] to ${procurement.requestedBy} from PRQ-${id}`,
         req.user?.name
       );
+
+      // Notify requester that item was purchased and issued
+      const requesterUser = await prisma.user.findFirst({
+        where: { OR: [{ name: procurement.requestedBy }, { email: procurement.requestedBy }] },
+      });
+      if (requesterUser) {
+        await notify(prisma, io, userSockets, {
+          userId: requesterUser.id,
+          type: 'REQUEST_UPDATED',
+          title: 'Your Item Has Been Procured',
+          message: `Your ${model} has been purchased and assigned to you.`,
+          link: '/inventory',
+        });
+      }
+
       res.json({ device, request });
     } catch (error) {
       console.error('Intake failed:', error);
@@ -795,6 +877,14 @@ app.post('/api/repairs', async (req: any, res) => {
       user.name
     );
 
+    // Notify IT that a new repair needs approval
+    await notifyRole(prisma, io, userSockets, ['IT'], {
+      type: 'APPROVAL_REQUIRED',
+      title: 'Repair Approval Required',
+      message: `${user.name || user.email} submitted a repair request for ${device.model}. Your sign-off is needed.`,
+      link: '/repairs',
+    });
+
     res.json(repair);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create repair request' });
@@ -849,6 +939,43 @@ app.patch('/api/repairs/:id/status', async (req: any, res) => {
       req.user?.name
     );
 
+    // Notify requester or next approver
+    const requesterUser = await prisma.user.findFirst({
+      where: { OR: [{ name: current.requester }, { email: current.requester }] },
+    });
+
+    if (action === 'REJECT') {
+      if (requesterUser) {
+        await notify(prisma, io, userSockets, {
+          userId: requesterUser.id,
+          type: 'REQUEST_UPDATED',
+          title: 'Repair Request Rejected',
+          message: `Your repair request for ${(repair as any).device?.model || 'your device'} was rejected by ${req.user.name}.`,
+          link: '/repairs',
+        });
+      }
+    } else if (updateData.status === 'APPROVED') {
+      if (requesterUser) {
+        await notify(prisma, io, userSockets, {
+          userId: requesterUser.id,
+          type: 'REQUEST_UPDATED',
+          title: 'Repair Request Fully Approved',
+          message: `Your repair request for ${(repair as any).device?.model || 'your device'} has been fully approved.`,
+          link: '/repairs',
+        });
+      }
+    } else {
+      const nextRoles = !repair.itApproved ? ['IT']
+        : !repair.adminApproved ? ['Admin']
+        : ['Manager'];
+      await notifyRole(prisma, io, userSockets, nextRoles, {
+        type: 'APPROVAL_REQUIRED',
+        title: 'Repair Needs Your Signature',
+        message: `REP-${id}: A repair is waiting for your sign-off.`,
+        link: '/repairs',
+      });
+    }
+
     res.json(repair);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update status' });
@@ -879,6 +1006,21 @@ app.patch('/api/repairs/:id/in-repair', authorizeRoles('IT', 'Admin'), async (re
       `REP-${id}: Repair process started (Status: IN_REPAIR) by ${req.user.name}`,
       req.user?.name
     );
+
+    // Notify the requester
+    const requesterUser = await prisma.user.findFirst({
+      where: { OR: [{ name: currentRepair.requester }, { email: currentRepair.requester }] },
+    });
+    if (requesterUser) {
+      await notify(prisma, io, userSockets, {
+        userId: requesterUser.id,
+        type: 'REQUEST_UPDATED',
+        title: 'Your Device Is Now Being Repaired',
+        message: `Repair work has started on ${(repair as any).device?.model || 'your device'}.`,
+        link: '/repairs',
+      });
+    }
+
     res.json(repair);
   } catch (error) {
     console.error('Failed to start repair:', error);
@@ -927,6 +1069,21 @@ app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: 
     });
 
     await logActivity('REPAIR_RESOLVED', `Resolved REP-${id} via ${repairType}`, req.user?.name);
+
+    // Notify the requester
+    const requesterUser = await prisma.user.findFirst({
+      where: { OR: [{ name: repair.requester }, { email: repair.requester }] },
+    });
+    if (requesterUser) {
+      await notify(prisma, io, userSockets, {
+        userId: requesterUser.id,
+        type: 'REQUEST_UPDATED',
+        title: 'Your Device Has Been Fixed',
+        message: `Repair REP-${id} has been resolved. Your device is ready.`,
+        link: '/repairs',
+      });
+    }
+
     res.json(repair);
   } catch (error) {
     console.error(error);
@@ -982,6 +1139,55 @@ app.get('/api/activity', async (req: any, res) => {
 });
 
 // Legacy login removed - now using /auth/google
+
+// --- Notification Routes ---
+app.get('/api/notifications', async (req: any, res) => {
+  try {
+    const notifications = await (prisma as any).notification.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+app.get('/api/notifications/unread-count', async (req: any, res) => {
+  try {
+    const count = await (prisma as any).notification.count({
+      where: { userId: req.user.id, isRead: false },
+    });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch count' });
+  }
+});
+
+app.post('/api/notifications/:id/read', async (req: any, res) => {
+  try {
+    const notification = await (prisma as any).notification.update({
+      where: { id: parseInt(req.params.id), userId: req.user.id },
+      data: { isRead: true },
+    });
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark as read' });
+  }
+});
+
+app.post('/api/notifications/read-all', async (req: any, res) => {
+  try {
+    await (prisma as any).notification.updateMany({
+      where: { userId: req.user.id, isRead: false },
+      data: { isRead: true },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark all as read' });
+  }
+});
 
 app.post('/api/activity', async (req, res) => {
   const { action, details, performedBy } = req.body;
