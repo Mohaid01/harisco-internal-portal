@@ -358,11 +358,34 @@ app.delete('/api/users/:id', authorizeRoles('IT'), async (req, res) => {
 
 app.get('/api/chat/users', async (req: any, res) => {
   const myId = req.user.id;
+  const { historyOnly } = req.query;
+
   try {
-    const users = await prisma.user.findMany({
+    // Get last message involving me for all users
+    const allMessages = await prisma.chatMessage.findMany({
       where: {
-        NOT: { id: myId },
+        OR: [{ senderId: myId }, { receiverId: myId }],
       },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    // Identify unique user IDs I have chatted with
+    const chatPartnerIds = new Set<number>();
+    allMessages.forEach(m => {
+      if (m.senderId !== myId) chatPartnerIds.add(m.senderId);
+      if (m.receiverId !== myId) chatPartnerIds.add(m.receiverId);
+    });
+
+    const where: any = {
+      NOT: { id: myId },
+    };
+
+    if (historyOnly === 'true') {
+      where.id = { in: Array.from(chatPartnerIds) };
+    }
+
+    const users = await prisma.user.findMany({
+      where,
       select: { id: true, email: true, name: true, role: true },
     });
 
@@ -376,19 +399,11 @@ app.get('/api/chat/users', async (req: any, res) => {
       _count: true,
     });
 
-    // Get last message timestamp for each user
-    const lastMessages = await prisma.chatMessage.findMany({
-      where: {
-        OR: [{ senderId: myId }, { receiverId: myId }],
-      },
-      orderBy: { timestamp: 'desc' },
-    });
-
-    const usersWithUnread = users.map(user => {
+    const usersWithMetadata = users.map(user => {
       const unread = unreadCounts.find(c => c.senderId === user.id);
 
       // Find the latest message timestamp involving this specific user
-      const latestMsg = lastMessages.find(
+      const latestMsg = allMessages.find(
         m =>
           (m.senderId === user.id && m.receiverId === myId) ||
           (m.senderId === myId && m.receiverId === user.id)
@@ -398,11 +413,14 @@ app.get('/api/chat/users', async (req: any, res) => {
         ...user,
         unreadCount: unread ? unread._count : 0,
         lastMessageAt: latestMsg ? latestMsg.timestamp : null,
+        lastMessageContent: latestMsg ? latestMsg.content : null,
+        lastMessageSenderId: latestMsg ? latestMsg.senderId : null,
       };
     });
 
-    res.json(usersWithUnread);
+    res.json(usersWithMetadata);
   } catch (error) {
+    console.error('Failed to fetch chat users:', error);
     res.status(500).json({ error: 'Failed to fetch chat users' });
   }
 });

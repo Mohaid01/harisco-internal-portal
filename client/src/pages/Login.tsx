@@ -73,7 +73,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   }, [location, navigate, onLogin])
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div className="min-h-screen flex items-center justify-center p-6 transition-colors duration-300">
       <div className="w-full max-w-[440px]">
         <div className="flex flex-col items-center mb-6">
           <img
@@ -81,19 +81,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             alt="HarisCo Full Logo"
             className="h-24 object-contain mb-2"
           />
-          <h1 className="text-2xl font-bold text-slate-900 mt-2 tracking-tight">Internal Portal</h1>
-          <p className="text-slate-500 text-sm mt-1">Sign in to manage office assets</p>
+          <h1 className="text-2xl font-bold mt-2 tracking-tight">Internal Portal</h1>
+          <p className="text-sm mt-1 opacity-70">Sign in to manage office assets</p>
         </div>
 
         {message && (
-          <div className="mb-6 p-4 bg-orange-50 border border-orange-100 rounded-lg text-sm text-orange-800 flex items-center gap-3 shadow-sm">
+          <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 rounded-lg text-sm text-orange-800 dark:text-orange-200 flex items-center gap-3 shadow-sm">
             <AlertCircle size={18} className="text-orange-500 flex-shrink-0" />
             <p>{message}</p>
           </div>
         )}
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-lg text-sm text-red-800 flex items-center gap-3 shadow-sm">
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 rounded-lg text-sm text-red-800 dark:text-red-200 flex items-center gap-3 shadow-sm">
             <AlertCircle size={18} className="text-red-500 flex-shrink-0" />
             <p>{error}</p>
           </div>
@@ -126,7 +126,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           ) : (
             <a
               href={AUTH_BASE}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-4 px-4 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group text-center no-underline"
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 py-4 px-4 rounded-xl font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm group text-center no-underline"
             >
               <img
                 src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg"
@@ -142,13 +142,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </a>
           )}
 
-          <p className="text-[11px] text-center text-slate-400 px-4">
+          <p className="text-[11px] text-center opacity-50 px-4">
             Authorized access only. Use your official @harisco.com or authorized Gmail account to
             log in.
           </p>
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-8 flex items-center justify-center gap-2">
+        <p className="text-center text-xs opacity-50 mt-8 flex items-center justify-center gap-2">
           <ShieldCheck size={14} />
           Secured local office system
         </p>

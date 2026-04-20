@@ -172,15 +172,27 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   const getStatusInfo = (status: ProcurementRequest['status']) => {
     switch (status) {
       case 'PENDING':
-        return { label: 'Awaiting Approvals', color: 'bg-blue-100 text-blue-700' }
+        return { 
+          label: 'Awaiting Approvals', 
+          color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
+        }
       case 'REJECTED':
-        return { label: 'Rejected', color: 'bg-red-100 text-red-700' }
+        return { 
+          label: 'Rejected', 
+          color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' 
+        }
       case 'APPROVED':
-        return { label: 'Fully Approved', color: 'bg-green-100 text-green-700' }
+        return { 
+          label: 'Fully Approved', 
+          color: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' 
+        }
       case 'PURCHASED':
-        return { label: 'Purchased & Logged', color: 'bg-slate-100 text-slate-700' }
+        return { 
+          label: 'Purchased & Logged', 
+          color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' 
+        }
       default:
-        return { label: status, color: 'bg-slate-100' }
+        return { label: status, color: 'bg-slate-100 dark:bg-slate-800' }
     }
   }
 
