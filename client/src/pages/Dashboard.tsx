@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Users,
   Smartphone,
@@ -25,6 +26,15 @@ interface ActivityLog {
   timestamp: string
 }
 
+interface Device {
+  id: number
+  serial: string
+  model: string
+  type: string
+  status: string
+  assignedTo?: string
+}
+
 interface DashboardProps {
   userRole: string
   userName: string
@@ -40,6 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
   })
   const [activities, setActivities] = useState<ActivityLog[]>([])
   const [allActivities, setAllActivities] = useState<ActivityLog[]>([])
+  const [userDevices, setUserDevices] = useState<Device[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAllModal, setShowAllModal] = useState(false)
 
@@ -60,6 +71,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
           fetch(`${API_BASE}/procurement`, { headers }).then((r) => r.json()),
           fetch(`${API_BASE}/activity`, { headers }).then((r) => r.json()),
         ])
+
+        const filteredUserDevices = dev.filter(
+          (d: any) =>
+            d.assignedTo === userName || d.assignedTo === localStorage.getItem('userEmail'),
+        )
+        setUserDevices(filteredUserDevices)
 
         if (userRole === 'Employee') {
           // Employees only see their own repairs and procurements
@@ -253,9 +270,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Activities */}
-        <div className="card">
+        <div className="lg:col-span-2 card">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-base font-bold flex items-center gap-2">
               <Activity size={18} className="text-harisco-blue" />
@@ -300,24 +317,47 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="card bg-slate-900 text-white border-none shadow-harisco overflow-hidden relative">
-            <div className="absolute top-[-20px] right-[-20px] w-32 h-32 bg-harisco-blue/20 rounded-full blur-3xl"></div>
-            <h3 className="text-base font-bold mb-4 relative z-10">Portal Status</h3>
-            <div className="space-y-4 relative z-10">
-              <div className="flex items-center justify-between">
-                <span className="text-sm opacity-70">Database Connection</span>
-                <span className="flex items-center gap-2 text-xs font-bold text-green-400">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                  STABLE
-                </span>
+        <div className="space-y-8">
+          {userDevices.length > 0 && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <Smartphone size={18} className="text-harisco-blue" />
+                  Your Devices
+                </h3>
+                <span className="text-[10px] text-slate-400 font-medium">{userDevices.length} Total</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm opacity-70">Automated Backups</span>
-                <span className="text-xs font-bold">DAILY (00:00)</span>
+              <div className="space-y-3">
+                {userDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-harisco-blue/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-slate-200 text-slate-400 group-hover:text-harisco-blue transition-colors shadow-sm shrink-0">
+                        <Smartphone size={16} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">{device.model}</p>
+                        <p className="text-[10px] font-mono text-slate-400 truncate">
+                          {device.serial}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full shrink-0 ${
+                          device.status === 'REPAIR'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {device.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
