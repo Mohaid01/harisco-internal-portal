@@ -134,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
     if (diff < 60) return 'Just now'
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return date.toLocaleDateString()
+    return date.toLocaleDateString('en-US', { timeZone: 'Asia/Karachi' })
   }
 
   const filteredActivities = allActivities.filter((act) => {
@@ -166,7 +166,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
     if (filteredActivities.length === 0) return
     const headers = ['Timestamp', 'User', 'Action', 'Details']
     const rows = filteredActivities.map((act) => [
-      new Date(act.timestamp).toLocaleString(),
+      new Date(act.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' }),
       act.performedBy || 'System',
       act.action,
       act.details.replace(/,/g, ' '), // Remove commas to avoid breaking CSV format
@@ -193,11 +193,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
     doc.setFontSize(11)
     doc.setTextColor(100)
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30)
+    doc.text(`Generated on: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}`, 14, 30)
     doc.text(`Filters: Time (${filterTimeRange}) | Type (${filterType})`, 14, 36)
 
     const tableData = filteredActivities.map((act) => [
-      new Date(act.timestamp).toLocaleString(),
+      new Date(act.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' }),
       act.performedBy || 'System',
       act.action,
       act.details,
@@ -418,7 +418,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
                     filteredActivities.map((act) => (
                       <tr key={act.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-xs font-mono text-slate-400">
-                          {new Date(act.timestamp).toLocaleString()}
+                          {new Date(act.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-xs font-bold text-harisco-blue uppercase tracking-tight bg-harisco-light px-2 py-0.5 rounded">
