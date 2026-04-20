@@ -9,6 +9,7 @@ import {
   Bell,
   ShoppingCart,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react'
 
 interface LayoutProps {
@@ -125,6 +126,13 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
     },
     { icon: <ShoppingCart size={20} />, label: 'Procurement', path: '/procurement' },
     { icon: <Wrench size={20} />, label: 'Repairs', path: '/repairs' },
+    {
+      icon: <ShieldCheck size={20} />,
+      label: 'User Management',
+      path: '/users',
+      roles: ['IT'],
+    },
+
   ]
 
   const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole))
