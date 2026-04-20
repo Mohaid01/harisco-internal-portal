@@ -7,6 +7,7 @@ import Inventory from './pages/Inventory'
 import Repairs from './pages/Repairs'
 import Procurement from './pages/Procurement'
 import Login from './pages/Login'
+import Users from './pages/Users'
 
 export type UserRole = 'IT' | 'Admin' | 'Manager' | 'Employee'
 
@@ -67,7 +68,12 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="procurement" element={<Procurement userRole={userRole} />} />
           <Route path="repairs" element={<Repairs userRole={userRole} userName={userName} />} />
+          <Route 
+            path="users" 
+            element={userRole === 'IT' ? <Users /> : <Navigate to="/dashboard" replace />} 
+          />
         </Route>
+
 
         {/* Fallback */}
         <Route

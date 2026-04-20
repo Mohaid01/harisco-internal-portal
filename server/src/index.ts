@@ -1,17 +1,26 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { sendStatusEmail } from './utils/mailer.ts';
+
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      email: string;
+      role: string;
+      name?: string | null;
+    }
+  }
+}
 
 dotenv.config();
 
@@ -107,6 +116,32 @@ passport.use(
   )
 );
 
+// --- Local Dev Auth Bypass ---
+app.post('/api/auth/local', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Local login disabled in production' });
+  }
+
+  const { username } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email: username } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found in authorized list' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name || user.email },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({ token, role: user.role, name: user.name || user.email });
+  } catch (error) {
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
 // --- Google Auth Routes ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
@@ -141,7 +176,7 @@ app.get('/auth/google/callback', (req, res, next) => {
   })(req, res, next);
 });
 
-// --- Authentication Middleware ---
+// --- Authentication & Authorization Middleware ---
 export const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -155,7 +190,20 @@ export const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
+const authorizeRoles = (...allowedRoles: string[]) => {
+  return (req: any, res: any, next: any) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
+    }
+    next();
+  };
+};
+
+// ... inside API routes section ...
+// These will be added after the authenticateToken middleware is applied to /api
+
 // --- Backup Service ---
+
 const DB_PATH = path.join(__dirname, '../prisma/dev.db');
 const BACKUP_DIR = path.join(__dirname, '../backups');
 
@@ -215,44 +263,63 @@ app.post('/api/admin/backup', (req, res) => {
 // --- API Routes ---
 
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login' || req.path === '/local-login' || req.path === '/health') {
+  // Whitelist login routes and health check from token requirement
+  if (req.path === '/login' || req.path === '/auth/local' || req.path === '/health') {
     return next();
   }
   return authenticateToken(req, res, next);
 });
 
+// User Management Routes (IT Only)
+app.get('/api/users', authorizeRoles('IT'), async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { email: 'asc' },
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/users', authorizeRoles('IT'), async (req, res) => {
+  const { email, role } = req.body;
+  try {
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: { role },
+      create: { email, role },
+    });
+    await logActivity(
+      'UPDATE_USER_ACCESS',
+      `Updated access for ${email} to ${role}`,
+      req.user?.name || 'System'
+    );
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', authorizeRoles('IT'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const userToDelete = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+    await prisma.user.delete({ where: { id: parseInt(id) } });
+    await logActivity(
+      'DELETE_USER_ACCESS',
+      `Removed access for ${userToDelete?.email}`,
+      req.user?.name || 'System'
+    );
+    res.json({ message: 'User removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove user' });
+  }
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
-});
-
-// Local Dev Login
-app.post('/api/local-login', async (req, res) => {
-  // Allow local login in dev environment or if explicitly enabled
-  const { username, password } = req.body;
-
-  const accounts: Record<string, any> = {
-    admin: { role: 'Admin', name: 'Local Admin', email: 'admin@harisco.com' },
-    IT: { role: 'IT', name: 'Local IT', email: 'it@harisco.com' },
-    manager: { role: 'Manager', name: 'Local Manager', email: 'manager@harisco.com' },
-    employee: { role: 'Employee', name: 'Local Employee', email: 'employee@harisco.com' },
-  };
-
-  if (accounts[username] && password === username) {
-    const user = accounts[username];
-    const token = jwt.sign(
-      {
-        id: 0,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-      },
-      JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-    return res.json({ token, role: user.role, name: user.name });
-  }
-  return res.status(401).json({ error: 'Invalid credentials. Available users: admin, IT, manager, employee (password same as username)' });
 });
 
 // Employee Routes
