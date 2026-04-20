@@ -61,7 +61,11 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
         devRes.json(),
         empRes.json(),
       ])
-      setRepairs(repData)
+      if (userRole === 'Employee') {
+        setRepairs(repData.filter((r: any) => r.requester === userName))
+      } else {
+        setRepairs(repData)
+      }
       setDevices(devData)
       setEmployees(empData)
     } catch (error) {
@@ -180,7 +184,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
         <div className="xl:col-span-2 space-y-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              Active Requests
+              {userRole === 'Employee' ? 'Your Active Requests' : 'Active Requests'}
             </h3>
             <div className="flex gap-2">
               <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-500 font-medium">

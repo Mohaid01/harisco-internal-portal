@@ -125,13 +125,13 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
 
   useEffect(() => {
     fetchUnreadCount()
-    
+
     // Set up Socket for real-time unread updates
     const socket: Socket = io(WS_URL)
     socket.on('connect', () => {
       if (userId) socket.emit('register', parseInt(userId))
     })
-    
+
     socket.on('receive_message', () => {
       // Refresh count when a new message arrives
       fetchUnreadCount()
@@ -166,7 +166,12 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
   }, [])
 
   const navItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard' },
+    {
+      icon: <LayoutDashboard size={20} />,
+      label: 'Dashboard',
+      path: '/dashboard',
+      roles: ['IT', 'Admin', 'Manager', 'Employee'],
+    },
     {
       icon: <Users size={20} />,
       label: 'Employees',
@@ -179,25 +184,40 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
       path: '/inventory',
       roles: ['IT', 'Admin', 'Manager'],
     },
-    { icon: <ShoppingCart size={20} />, label: 'Procurement', path: '/procurement' },
-    { icon: <Wrench size={20} />, label: 'Repairs', path: '/repairs' },
+    {
+      icon: <ShoppingCart size={20} />,
+      label: 'Procurement',
+      path: '/procurement',
+      roles: ['IT', 'Admin', 'Manager'],
+    },
+    {
+      icon: <Wrench size={20} />,
+      label: 'Repairs',
+      path: '/repairs',
+      roles: ['IT', 'Admin', 'Manager', 'Employee'],
+    },
     {
       icon: <ShieldCheck size={20} />,
       label: 'User Management',
       path: '/users',
       roles: ['IT'],
     },
-    { icon: <MessageSquare size={20} />, label: 'Chat', path: '/chat' },
+    {
+      icon: <MessageSquare size={20} />,
+      label: 'Chat',
+      path: '/chat',
+      roles: ['IT', 'Admin', 'Manager'],
+    },
   ]
 
-  const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole))
+  const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole))
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'Asia/Karachi'
+      timeZone: 'Asia/Karachi',
     })
   }
 
@@ -253,7 +273,7 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
             {navItems.find((n) => n.path === location.pathname)?.label || 'Internal Portal'}
           </h2>
           <div className="flex items-center gap-4 relative">
-            {(userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') && (
+            {userRole !== 'Employee' && (
               <div className="relative" ref={notificationRef}>
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}

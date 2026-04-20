@@ -26,9 +26,10 @@ interface ActivityLog {
 
 interface DashboardProps {
   userRole: string
+  userName: string
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
   const [stats, setStats] = useState({
     employees: 0,
     devices: 0,
@@ -62,12 +63,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         setStats({
           employees: 0,
           devices: 0,
-          repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED')
-            .length, // Filter by requester later
-          procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length, // Filter by requester later
+          repairs: rep.filter((r: any) => (r.status !== 'APPROVED' && r.status !== 'REJECTED') && r.requester === userName)
+            .length,
+          procurements: pro.filter((p: any) => p.status !== 'PURCHASED' && p.requester === userName).length,
         })
-        setAllActivities(act.filter((a: any) => a.performedBy?.includes('Employee')))
-        setActivities(act.filter((a: any) => a.performedBy?.includes('Employee')).slice(0, 6))
+        setAllActivities(act.filter((a: any) => a.performedBy === userName))
+        setActivities(act.filter((a: any) => a.performedBy === userName).slice(0, 6))
       } else {
         setStats({
           employees: emp.length,
@@ -103,23 +104,23 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
       value: stats.employees,
       icon: <Users className="text-blue-600" />,
       trend: 'Active users',
-      roles: ['IT', 'DIRECTOR', 'ADMIN'],
+      roles: ['IT', 'Admin', 'Manager'],
     },
     {
       label: 'Devices in Stock',
       value: stats.devices,
       icon: <Smartphone className="text-green-600" />,
       trend: 'Available assets',
-      roles: ['IT', 'DIRECTOR', 'ADMIN'],
+      roles: ['IT', 'Admin', 'Manager'],
     },
     {
-      label: 'Active Repairs',
+      label: userRole === 'Employee' ? 'Your Active Repairs' : 'Active Repairs',
       value: stats.repairs,
       icon: <Wrench className="text-amber-600" />,
-      trend: 'Pending IT/Admin',
+      trend: userRole === 'Employee' ? 'Pending IT/Admin' : 'Pending IT/Admin',
     },
     {
-      label: 'Pending Procurements',
+      label: userRole === 'Employee' ? 'Your Active Procurements' : 'Pending Procurements',
       value: stats.procurements,
       icon: <AlertCircle className="text-red-600" />,
       trend: 'Approval pipeline',
@@ -242,21 +243,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Activities */}
-        {(userRole === 'IT' || userRole === 'DIRECTOR' || userRole === 'STAFF') && (
           <div className="card">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-base font-bold flex items-center gap-2">
                 <Activity size={18} className="text-harisco-blue" />
                 Recent Activity Log
               </h3>
-              {(userRole === 'IT' || userRole === 'DIRECTOR') && (
                 <button
                   onClick={() => setShowAllModal(true)}
                   className="text-xs text-harisco-blue font-bold hover:underline"
                 >
                   View All
                 </button>
-              )}
             </div>
             <div className="space-y-6">
               {activities.length > 0 ? (
@@ -288,7 +286,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
               )}
             </div>
           </div>
-        )}
 
         <div className="space-y-6">
           <div className="card bg-slate-900 text-white border-none shadow-harisco overflow-hidden relative">

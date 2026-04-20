@@ -464,7 +464,8 @@ app.get('/api/health', (req, res) => {
 });
 
 // Employee Routes
-app.get('/api/employees', async (req, res) => {
+app.get('/api/employees', async (req: any, res) => {
+  if (req.user.role === 'Employee') return res.json([]);
   const employees = await prisma.employee.findMany();
   res.json(employees);
 });
@@ -483,7 +484,19 @@ app.post('/api/employees', async (req, res) => {
 });
 
 // Inventory Routes
-app.get('/api/inventory', async (req, res) => {
+app.get('/api/inventory', async (req: any, res) => {
+  if (req.user.role === 'Employee') {
+    const devices = await prisma.device.findMany({
+      where: {
+        OR: [
+          { assignedTo: req.user.email },
+          { assignedTo: req.user.name || '' }
+        ]
+      },
+      include: { repairs: true }
+    });
+    return res.json(devices);
+  }
   const devices = await prisma.device.findMany({ include: { repairs: true } });
   res.json(devices);
 });
@@ -531,7 +544,13 @@ app.post('/api/inventory/:id/issue', async (req, res) => {
 });
 
 // Procurement Routes
-app.get('/api/procurement', async (req, res) => {
+app.get('/api/procurement', async (req: any, res) => {
+  if (req.user.role === 'Employee') {
+    const requests = await prisma.procurement.findMany({
+      where: { requester: req.user.name || req.user.email }
+    });
+    return res.json(requests);
+  }
   const requests = await prisma.procurement.findMany();
   res.json(requests);
 });
@@ -613,7 +632,14 @@ app.post('/api/procurement/:id/intake', async (req, res) => {
 });
 
 // Repairs Routes
-app.get('/api/repairs', async (req, res) => {
+app.get('/api/repairs', async (req: any, res) => {
+  if (req.user.role === 'Employee') {
+    const repairs = await prisma.repair.findMany({
+      where: { requester: req.user.name || req.user.email },
+      include: { device: true }
+    });
+    return res.json(repairs);
+  }
   const repairs = await prisma.repair.findMany({ include: { device: true } });
   res.json(repairs);
 });
@@ -709,8 +735,15 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
   }
 });
 
-// Activity Log Routes
-app.get('/api/activity', async (req, res) => {
+app.get('/api/activity', async (req: any, res) => {
+  if (req.user.role === 'Employee') {
+    const logs = await prisma.activityLog.findMany({
+      where: { performedBy: req.user.name || req.user.email },
+      orderBy: { timestamp: 'desc' },
+      take: 20,
+    });
+    return res.json(logs);
+  }
   const logs = await prisma.activityLog.findMany({
     orderBy: { timestamp: 'desc' },
     take: 20,
