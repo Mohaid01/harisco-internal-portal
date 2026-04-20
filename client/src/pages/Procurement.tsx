@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { ShoppingCart, CheckCircle2, XCircle, Plus, Loader2, X, ShieldAlert } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import { API_BASE } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface ProcurementRequest {
   id: number
@@ -18,9 +20,8 @@ interface ProcurementProps {
   userRole: string
 }
 
-import { API_BASE } from '../config'
-
 const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
+  const { withLoading } = useLoading()
   const [showAddModal, setShowAddModal] = useState(false)
   const [showIntakeModal, setShowIntakeModal] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null)
@@ -39,18 +40,20 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   const [intakeType, setIntakeType] = useState('Laptop')
 
   const fetchRequests = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/procurement`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      setRequests(data)
-    } catch (error) {
-      console.error('Failed to fetch procurement requests:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/procurement`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        setRequests(data)
+      } catch (error) {
+        console.error('Failed to fetch procurement requests:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    })
   }
 
   useEffect(() => {
@@ -58,83 +61,89 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   }, [])
 
   const handleSubmitRequest = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/procurement`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          item,
-          estimatedCost: cost,
-          requester: dept,
-          type,
-        }),
-      })
-      if (res.ok) {
-        setShowAddModal(false)
-        fetchRequests()
-        setItem('')
-        setCost('')
-        setType('Laptop')
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/procurement`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            item,
+            estimatedCost: cost,
+            requester: dept,
+            type,
+          }),
+        })
+        if (res.ok) {
+          setShowAddModal(false)
+          fetchRequests()
+          setItem('')
+          setCost('')
+          setType('Laptop')
+        }
+      } catch (error) {
+        console.error('Failed to submit request:', error)
       }
-    } catch (error) {
-      console.error('Failed to submit request:', error)
-    }
+    })
   }
 
   const handleUpdateStatus = async (id: number, status: string) => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/procurement/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
-      })
-      if (res.ok) {
-        fetchRequests()
-        setSelectedRequest(null)
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/procurement/${id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
+        })
+        if (res.ok) {
+          fetchRequests()
+          setSelectedRequest(null)
+        }
+      } catch (error) {
+        console.error('Failed to update status:', error)
       }
-    } catch (error) {
-      console.error('Failed to update status:', error)
-    }
+    })
   }
 
   const handleIntakeSubmit = async () => {
     if (!selectedRequest || !intakeSerial || !intakeModel) return
 
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/procurement/${selectedRequest.id}/intake`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          serial: intakeSerial,
-          model: intakeModel,
-          type: intakeType,
-          performedBy: `${userRole} Authority`,
-        }),
-      })
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/procurement/${selectedRequest.id}/intake`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            serial: intakeSerial,
+            model: intakeModel,
+            type: intakeType,
+            performedBy: `${userRole} Authority`,
+          }),
+        })
 
-      if (res.ok) {
-        setShowIntakeModal(false)
-        fetchRequests()
-        setSelectedRequest(null)
-        setIntakeSerial('')
-        setIntakeModel('')
-        setIntakeType('Laptop')
+        if (res.ok) {
+          setShowIntakeModal(false)
+          fetchRequests()
+          setSelectedRequest(null)
+          setIntakeSerial('')
+          setIntakeModel('')
+          setIntakeType('Laptop')
+        }
+      } catch (error) {
+        console.error('Failed to process intake:', error)
       }
-    } catch (error) {
-      console.error('Failed to process intake:', error)
-    }
+    })
   }
 
   const canApprove = (status: string) => {

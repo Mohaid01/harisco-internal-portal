@@ -23,9 +23,13 @@ interface LayoutProps {
   userId: string
 }
 
+import { API_BASE, WS_URL } from '../config'
+import { useLoading } from '../context/LoadingContext'
+
 const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
 const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId }) => {
+  const { withLoading } = useLoading()
   const location = useLocation()
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
@@ -61,27 +65,29 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
   }, [])
 
   const handleLogout = async (reason = 'User logged out', isTimeout = false) => {
-    try {
-      const token = localStorage.getItem('token')
-      await fetch(`${API_BASE}/activity`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ 
-          action: 'LOGOUT', 
-          details: reason,
-          performedBy: userName
-        }),
-      })
-    } catch (e) {}
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        await fetch(`${API_BASE}/activity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            action: 'LOGOUT',
+            details: reason,
+            performedBy: userName,
+          }),
+        })
+      } catch (e) {}
 
-    if (isTimeout) {
-      sessionStorage.setItem('logoutMessage', 'You have been logged out due to inactivity.')
-    }
+      if (isTimeout) {
+        sessionStorage.setItem('logoutMessage', 'You have been logged out due to inactivity.')
+      }
 
-    onLogout()
+      onLogout()
+    })
   }
 
   // Fetch Notifications
