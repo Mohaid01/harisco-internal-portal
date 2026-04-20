@@ -12,7 +12,7 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import multer from 'multer';
-import { sendStatusEmail } from './utils/mailer.ts';
+
 
 declare global {
   namespace Express {
@@ -273,8 +273,11 @@ export const authenticateToken = (req: any, res: any, next: any) => {
 
 const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: any, res: any, next: any) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
+    const userRole = (req.user?.role || '').toUpperCase();
+    const normalizedAllowed = allowedRoles.map(r => r.toUpperCase());
+    
+    if (!normalizedAllowed.includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
     }
     next();
   };
@@ -568,70 +571,84 @@ app.post('/api/inventory/:id/issue', async (req: any, res) => {
 
 // Procurement Routes
 app.get('/api/procurement', async (req: any, res) => {
-  if (req.user.role === 'Employee') {
-    const requests = await prisma.procurement.findMany({
-      where: { requester: req.user.name || req.user.email },
-    });
-    return res.json(requests);
-  }
-  const requests = await prisma.procurement.findMany();
-  res.json(requests);
-});
+  const where = req.user.role === 'Employee' 
+    ? { requestedBy: req.user.name || req.user.email } 
+    : {};
+    
+  const requests = await prisma.procurement.findMany({ where });
+  // Synthesize legacy approvals for consistency
+  const synthesized = requests.map((r) => {
+    const isPastApproval = ['APPROVED', 'PURCHASED'].includes(r.status)
+    return {
+      ...r,
+      itApproved: r.itApproved || isPastApproval,
+      adminApproved: r.adminApproved || isPastApproval,
+      managerApproved: r.managerApproved || isPastApproval,
+    }
+  })
+  res.json(synthesized)
+})
 
 app.post('/api/procurement', async (req, res) => {
-  const { item, estimatedCost, requester, type } = req.body;
+  const { item, requestedBy, reason, type } = req.body
   try {
     const procurement = await prisma.procurement.create({
-      data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
-    });
+      data: { item, requestedBy, reason, type, status: 'PENDING' },
+    })
     await logActivity(
       'CREATE_PROCUREMENT',
-      `Requested: ${item} (Est: ${estimatedCost})`,
-      req.user?.name
-    );
+      `Requested: ${item} (Reason: ${reason})`,
+      req.user?.name,
+    )
 
-    // Notify all IT users
-    const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
-    for (const it of itUsers) {
-      await sendStatusEmail(
-        it.email,
-        `🛒 New Procurement Request: ${item}`,
-        `<h2>New Procurement Request</h2>
-         <p>A new item has been requested by <strong>${requester}</strong>.</p>
-         <ul>
-           <li><strong>Item:</strong> ${item}</li>
-           <li><strong>Est. Cost:</strong> ${estimatedCost}</li>
-           <li><strong>Type:</strong> ${type}</li>
-         </ul>
-         <p>Please review it in the IT Portal.</p>`
-      );
-    }
 
-    res.json(procurement);
+
+    res.json(procurement)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create request' });
+    res.status(500).json({ error: 'Failed to create request' })
   }
-});
+})
 
 app.patch('/api/procurement/:id/status', async (req: any, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { action } = req.body; // 'APPROVE' or 'REJECT'
+  const role = req.user.role.toUpperCase();
+
   try {
+    let updateData: any = {};
+    let approvalNote = '';
+
+    if (action === 'REJECT') {
+      updateData = { status: 'REJECTED' };
+      approvalNote = 'REJECTED';
+    } else if (action === 'APPROVE') {
+      if (role === 'IT') { updateData.itApproved = true; approvalNote = 'IT Sign-off'; }
+      else if (role === 'ADMIN') { updateData.adminApproved = true; approvalNote = 'Admin Sign-off'; }
+      else if (role === 'MANAGER') { updateData.managerApproved = true; approvalNote = 'Manager Sign-off'; }
+      else return res.status(403).json({ error: 'Unauthorized to sign off' });
+    }
+
+    const current = await prisma.procurement.findUnique({ where: { id: parseInt(id) } });
+    if (!current) return res.status(404).json({ error: 'Request not found' });
+
+    // Transition logic
+    const nextIt = updateData.itApproved || current.itApproved;
+    const nextAdmin = updateData.adminApproved || current.adminApproved;
+    const nextManager = updateData.managerApproved || current.managerApproved;
+
+    if (nextIt && nextAdmin && nextManager) {
+      updateData.status = 'APPROVED';
+    }
+
     const request = await prisma.procurement.update({
       where: { id: parseInt(id) },
-      data: { status },
+      data: updateData,
     });
-    await logActivity(
-      'UPDATE_PROCUREMENT_STATUS',
-      `Updated PRQ-${id} to ${status}`,
-      req.user?.name
-    );
 
-    // Send email notification
-    await sendStatusEmail(
-      'requester@harisco.com', // In a real app, fetch the actual requester's email
-      `Procurement PRQ-${id} Status Update`,
-      `<h2>Status Update</h2><p>Your procurement request for <strong>${request.item}</strong> has been updated to <strong>${status}</strong>.</p>`
+    await logActivity(
+      'PROCUREMENT_APPROVAL',
+      `PRQ-${id}: ${approvalNote} by ${req.user.name || req.user.email}`,
+      req.user?.name
     );
 
     res.json(request);
@@ -640,43 +657,61 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
   }
 });
 
-app.post('/api/procurement/:id/intake', async (req: any, res) => {
-  const { id } = req.params;
-  const { serial, model, type } = req.body;
+app.post('/api/procurement/:id/intake', authorizeRoles('IT', 'Admin'), upload.single('receipt'), async (req: any, res) => {
+  const { id } = req.params
+  const { serial, model, type } = req.body
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Purchase receipt is mandatory' })
+  }
+
+  const receiptUrl = `/uploads/${req.file.filename}`
+
   try {
     // 1. Create the Device in Inventory
     const device = await prisma.device.create({
       data: { serial, model, type, status: 'IN_STOCK' },
-    });
+    })
 
-    // 2. Mark Procurement as PURCHASED
+    // 2. Mark Procurement as PURCHASED and add receiptUrl
     const request = await prisma.procurement.update({
       where: { id: parseInt(id) },
-      data: { status: 'PURCHASED' },
-    });
+      data: { status: 'PURCHASED', receiptUrl },
+    })
 
     await logActivity(
       'PROCUREMENT_INTAKE',
-      `Stocked ${model} [${serial}] from PRQ-${id}`,
-      req.user?.name
-    );
-    res.json({ device, request });
+      `Stocked ${model} [${serial}] from PRQ-${id}${receiptUrl ? ' (Receipt attached)' : ''}`,
+      req.user?.name,
+    )
+    res.json({ device, request })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to process intake' });
+    console.error('Intake failed:', error)
+    res.status(500).json({ error: 'Failed to process intake' })
   }
-});
+})
 
 // Repairs Routes
 app.get('/api/repairs', async (req: any, res) => {
-  if (req.user.role === 'Employee') {
-    const repairs = await prisma.repair.findMany({
-      where: { requester: req.user.name || req.user.email },
-      include: { device: true },
-    });
-    return res.json(repairs);
-  }
-  const repairs = await prisma.repair.findMany({ include: { device: true } });
-  res.json(repairs);
+  const where = req.user.role === 'Employee' 
+    ? { requester: req.user.name || req.user.email } 
+    : {};
+
+  const repairs = await prisma.repair.findMany({ 
+    where,
+    include: { device: true } 
+  });
+  // Synthesize legacy approvals for consistency
+  const synthesized = repairs.map((r) => {
+    const isPastApproval = ['APPROVED', 'IN_REPAIR', 'RESOLVED'].includes(r.status)
+    return {
+      ...r,
+      itApproved: r.itApproved || isPastApproval,
+      adminApproved: r.adminApproved || isPastApproval,
+      managerApproved: r.managerApproved || isPastApproval,
+    }
+  })
+  res.json(synthesized)
 });
 
 app.post('/api/repairs', async (req: any, res) => {
@@ -712,7 +747,7 @@ app.post('/api/repairs', async (req: any, res) => {
         deviceId,
         requester: user.name || user.email,
         description,
-        status: 'PENDING_IT',
+        status: 'PENDING',
       },
     });
 
@@ -728,22 +763,7 @@ app.post('/api/repairs', async (req: any, res) => {
       user.name
     );
 
-    // Notify all IT users
-    const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
-    for (const it of itUsers) {
-      await sendStatusEmail(
-        it.email,
-        `🚨 New Repair Request: ${device.model}`,
-        `<h2>New Repair Request</h2>
-         <p>A new repair has been requested by <strong>${user.name}</strong>.</p>
-         <ul>
-           <li><strong>Device:</strong> ${device.model}</li>
-           <li><strong>Serial:</strong> ${device.serial}</li>
-           <li><strong>Problem:</strong> ${description}</li>
-         </ul>
-         <p>Please review it in the IT Portal.</p>`
-      );
-    }
+
 
     res.json(repair);
   } catch (error) {
@@ -753,20 +773,44 @@ app.post('/api/repairs', async (req: any, res) => {
 
 app.patch('/api/repairs/:id/status', async (req: any, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { action } = req.body; // 'APPROVE' or 'REJECT'
+  const role = req.user.role.toUpperCase();
+
   try {
+    let updateData: any = {};
+    let approvalNote = '';
+
+    if (action === 'REJECT') {
+      updateData = { status: 'REJECTED' };
+      approvalNote = 'REJECTED';
+    } else if (action === 'APPROVE') {
+      if (role === 'IT') { updateData.itApproved = true; approvalNote = 'IT Sign-off'; }
+      else if (role === 'ADMIN') { updateData.adminApproved = true; approvalNote = 'Admin Sign-off'; }
+      else if (role === 'MANAGER') { updateData.managerApproved = true; approvalNote = 'Manager Sign-off'; }
+      else return res.status(403).json({ error: 'Unauthorized to sign off' });
+    }
+
+    const current = await prisma.repair.findUnique({ where: { id: parseInt(id) } });
+    if (!current) return res.status(404).json({ error: 'Repair not found' });
+
+    const nextIt = updateData.itApproved || current.itApproved;
+    const nextAdmin = updateData.adminApproved || current.adminApproved;
+    const nextManager = updateData.managerApproved || current.managerApproved;
+
+    if (nextIt && nextAdmin && nextManager) {
+      updateData.status = 'APPROVED';
+    }
+
     const repair = await prisma.repair.update({
       where: { id: parseInt(id) },
-      data: { status },
+      data: updateData,
       include: { device: true },
     });
-    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to ${status}`, req.user?.name);
 
-    // Send email notification
-    await sendStatusEmail(
-      'requester@harisco.com', // In a real app, fetch the actual requester's email
-      `Repair REP-${id} Status Update`,
-      `<h2>Status Update</h2><p>Your repair request for <strong>${repair.device.model}</strong> has been updated to <strong>${status}</strong>.</p>`
+    await logActivity(
+      'REPAIR_APPROVAL',
+      `REP-${id}: ${approvalNote} by ${req.user.name || req.user.email}`,
+      req.user?.name
     );
 
     res.json(repair);
@@ -850,7 +894,7 @@ app.get('/api/activity', async (req: any, res) => {
       select: { id: true },
     });
     const procs = await prisma.procurement.findMany({
-      where: { requester: { in: identifiers } },
+      where: { requestedBy: { in: identifiers } },
       select: { id: true },
     });
     const devices = await prisma.device.findMany({
@@ -906,7 +950,12 @@ app.use(express.static(path.join(__dirname, '../public')));
 // The "catchall" handler: for any request that doesn't
 // match one above, send back React's index.html file.
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  const indexPath = path.join(__dirname, '../public/index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).json({ error: 'Endpoint not found or frontend not built' });
+  }
 });
 
 // --- Socket.io Chat Implementation ---

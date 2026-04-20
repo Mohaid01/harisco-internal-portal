@@ -9,6 +9,7 @@ import {
   X,
   ShieldAlert,
   ClipboardCheck,
+  Eye,
 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { API_BASE } from '../config'
@@ -33,14 +34,10 @@ interface RepairRequest {
   device: { model: string; serial: string }
   requester: string
   description: string
-  status:
-    | 'PENDING_IT'
-    | 'PENDING_ADMIN'
-    | 'PENDING_MANAGER'
-    | 'APPROVED'
-    | 'REJECTED'
-    | 'IN_REPAIR'
-    | 'RESOLVED'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'IN_REPAIR' | 'RESOLVED'
+  itApproved: boolean
+  adminApproved: boolean
+  managerApproved: boolean
   repairType?: 'IN_HOUSE' | 'VENDOR' | null
   vendorName?: string | null
   vendorContact?: string | null
@@ -66,6 +63,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
   const [devices, setDevices] = useState<Device[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false)
 
   // Form states (New Repair)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
@@ -117,7 +115,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
     fetchRepairs()
   }, [])
 
-  const handleUpdateStatus = async (id: number, status: string) => {
+  const handleUpdateStatus = async (id: number, action: 'APPROVE' | 'REJECT') => {
     await withLoading(async () => {
       try {
         const token = localStorage.getItem('token')
@@ -127,11 +125,12 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
+          body: JSON.stringify({ action }),
         })
         if (res.ok) {
+          const updated = await res.json()
           fetchRepairs()
-          setSelectedRepair(null)
+          setSelectedRepair(updated)
         }
       } catch (error) {
         console.error('Failed to update status:', error)
@@ -183,9 +182,10 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
         })
 
         if (res.ok) {
+          const updated = await res.json()
           setShowResolveModal(false)
           fetchRepairs()
-          setSelectedRepair(null)
+          setSelectedRepair(updated)
           // Reset form
           setRepairType('IN_HOUSE')
           setFixDetails('')
@@ -238,35 +238,24 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
     })
   }
 
-  const canApprove = (status: string) => {
-    if (userRole === 'IT' && status === 'PENDING_IT') return true
-    if (userRole === 'Admin' && status === 'PENDING_ADMIN') return true
-    if (userRole === 'Manager' && (status === 'PENDING_MANAGER' || status === 'APPROVED'))
-      return true
+  const canApprove = (req: RepairRequest) => {
+    if (userRole === 'IT' && !req.itApproved) return true
+    if (userRole === 'Admin' && !req.adminApproved) return true
+    if (userRole === 'Manager' && !req.managerApproved) return true
     return false
   }
 
   const getStatusInfo = (status: RepairRequest['status']) => {
     switch (status) {
-      case 'PENDING_IT':
-        return { label: 'IT Review', icon: <Clock size={14} />, color: 'bg-blue-100 text-blue-700' }
-      case 'PENDING_ADMIN':
-        return {
-          label: 'Admin Approval',
-          icon: <Clock size={14} />,
-          color: 'bg-purple-100 text-purple-700',
-        }
-      case 'PENDING_MANAGER':
-        return {
-          label: 'Manager Final',
-          icon: <Clock size={14} />,
-          color: 'bg-orange-100 text-orange-700',
-        }
+      case 'PENDING':
+        return { label: 'Awaiting Approvals', icon: <Clock size={14} />, color: 'bg-blue-100 text-blue-700' }
+      case 'REJECTED':
+        return { label: 'Rejected', icon: <XCircle size={14} />, color: 'bg-red-100 text-red-700' }
       case 'APPROVED':
         return {
-          label: 'Awaiting Repair',
+          label: 'Fully Approved',
           icon: <ClipboardCheck size={14} />,
-          color: 'bg-amber-100 text-amber-700',
+          color: 'bg-green-100 text-green-700',
         }
       case 'IN_REPAIR':
         return {
@@ -280,8 +269,6 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
           icon: <CheckCircle2 size={14} />,
           color: 'bg-emerald-100 text-emerald-700',
         }
-      case 'REJECTED':
-        return { label: 'Rejected', icon: <XCircle size={14} />, color: 'bg-red-100 text-red-700' }
       default:
         return { label: status, icon: <Clock size={14} />, color: 'bg-slate-100' }
     }
@@ -379,77 +366,79 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                   </p>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 block">
-                    Approval Workflow
-                  </label>
-                  <div className="space-y-4 relative ml-3 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-px before:bg-slate-200">
-                    <div className="relative pl-6 flex items-center justify-between">
-                      <div
-                        className={`absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${selectedRepair.status === 'PENDING_IT' ? 'bg-harisco-blue animate-pulse' : 'bg-green-500'}`}
-                      ></div>
-                      <span className="text-xs font-semibold">IT Review</span>
-                      <span className="text-[10px] text-harisco-blue font-bold uppercase">
-                        {selectedRepair.status === 'PENDING_IT' ? 'Active' : 'Completed'}
-                      </span>
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">Approval Checklist</p>
+                  <div className="flex flex-wrap gap-2">
+                    <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRepair.itApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                      IT {selectedRepair.itApproved ? <CheckCircle2 size={12} /> : null}
                     </div>
-                    <div
-                      className={`relative pl-6 flex items-center justify-between ${['PENDING_IT', 'PENDING_ADMIN'].includes(selectedRepair.status) ? 'text-slate-300' : ''}`}
-                    >
-                      <div
-                        className={`absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${selectedRepair.status === 'PENDING_MANAGER' ? 'bg-harisco-blue animate-pulse' : ['PENDING_IT', 'PENDING_ADMIN'].includes(selectedRepair.status) ? 'bg-slate-200' : 'bg-green-500'}`}
-                      ></div>
-                      <span className="text-xs font-semibold">Manager Final</span>
-                      <span className="text-[10px] font-bold uppercase">
-                        {selectedRepair.status === 'PENDING_MANAGER'
-                          ? 'Active'
-                          : ['PENDING_IT', 'PENDING_ADMIN'].includes(selectedRepair.status)
-                            ? 'Pending'
-                            : 'Completed'}
-                      </span>
+                    <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRepair.adminApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                      ADMIN {selectedRepair.adminApproved ? <CheckCircle2 size={12} /> : null}
                     </div>
-                    <div
-                      className={`relative pl-6 flex items-center justify-between ${['PENDING_IT', 'PENDING_ADMIN', 'PENDING_MANAGER'].includes(selectedRepair.status) ? 'text-slate-300' : ''}`}
-                    >
-                      <div
-                        className={`absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${selectedRepair.status === 'APPROVED' ? 'bg-amber-500 animate-pulse' : ['PENDING_IT', 'PENDING_ADMIN', 'PENDING_MANAGER'].includes(selectedRepair.status) ? 'bg-slate-200' : 'bg-green-500'}`}
-                      ></div>
-                      <span className="text-xs font-semibold">Awaiting Repair</span>
-                      <span className="text-[10px] font-bold uppercase">
-                        {selectedRepair.status === 'APPROVED'
-                          ? 'Active'
-                          : ['PENDING_IT', 'PENDING_ADMIN', 'PENDING_MANAGER'].includes(
-                                selectedRepair.status,
-                              )
-                            ? 'Pending'
-                            : 'Completed'}
-                      </span>
+                    <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRepair.managerApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                      MANAGER {selectedRepair.managerApproved ? <CheckCircle2 size={12} /> : null}
                     </div>
-                    {(selectedRepair.status === 'IN_REPAIR' ||
-                      selectedRepair.status === 'RESOLVED') && (
-                      <>
-                        <div className="relative pl-6 flex items-center justify-between">
-                          <div
-                            className={`absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${selectedRepair.status === 'IN_REPAIR' ? 'bg-indigo-500 animate-pulse' : 'bg-green-500'}`}
-                          ></div>
-                          <span className="text-xs font-semibold">In Repair</span>
-                          <span className="text-[10px] text-indigo-500 font-bold uppercase">
-                            {selectedRepair.status === 'IN_REPAIR' ? 'Active' : 'Completed'}
-                          </span>
-                        </div>
-                        {selectedRepair.status === 'RESOLVED' && (
-                          <div className="relative pl-6 flex items-center justify-between">
-                            <div className="absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-emerald-500"></div>
-                            <span className="text-xs font-semibold">Resolved</span>
-                            <span className="text-[10px] text-emerald-500 font-bold uppercase">
-                              Completed
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    )}
                   </div>
                 </div>
+
+                {selectedRepair.status === 'PENDING' && (
+                  <div className="pt-4 border-t border-slate-100 space-y-3">
+                    {canApprove(selectedRepair) ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button
+                          onClick={() => handleUpdateStatus(selectedRepair.id, 'REJECTED')}
+                          variant="danger"
+                          className="w-full flex items-center justify-center gap-2 text-xs"
+                        >
+                          <XCircle size={16} />
+                          Reject Request
+                        </Button>
+                        <Button
+                          onClick={() => handleUpdateStatus(selectedRepair.id, 'APPROVE')}
+                          className="w-full flex items-center justify-center gap-2 text-xs"
+                        >
+                          <CheckCircle2 size={16} />
+                          Approve Stage
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-3">
+                        <ShieldAlert size={18} className="text-slate-400" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
+                            Sign-off Required
+                          </p>
+                          <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
+                            {userRole === 'Employee' 
+                              ? 'Waiting for IT, Admin, and Manager sign-off.' 
+                              : 'You have already signed off or lack authority for this request.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedRepair.status === 'APPROVED' && (
+                  <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
+                    <p className="text-xs text-green-700 font-medium flex items-center gap-2">
+                      <CheckCircle2 size={14} />
+                      Request fully approved. Move to Repair Phase.
+                    </p>
+                    {userRole === 'IT' || userRole === 'Admin' ? (
+                      <Button
+                        onClick={() => handleInRepair(selectedRepair.id)}
+                        className="w-full mt-3 !bg-harisco-blue hover:!bg-blue-700 text-xs py-2"
+                      >
+                        Start Repair Process
+                      </Button>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic mt-2">
+                        Only Admin or IT can start the repair process.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {selectedRepair.status === 'RESOLVED' && (
                   <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg space-y-3">
@@ -517,20 +506,16 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       </div>
                     )}
                     {selectedRepair.receiptUrl && (
-                      <div className="mt-2 pt-2 border-t border-emerald-200/50 flex items-center justify-between">
-                        <span className="text-emerald-600/70 font-semibold uppercase tracking-wider text-[9px]">
-                          Receipt
-                        </span>
-                        <a
-                          href={API_BASE.replace('/api', '') + selectedRepair.receiptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-bold text-harisco-blue hover:underline"
-                        >
-                          View Document
-                        </a>
-                      </div>
-                    )}
+                        <div className="col-span-2 pt-2 mt-2 border-t border-emerald-100">
+                          <button
+                            onClick={() => setShowReceiptPreview(true)}
+                            className="flex items-center gap-2 text-[10px] text-harisco-blue font-bold hover:underline"
+                          >
+                            <Eye size={12} />
+                            Preview Repair Receipt
+                          </button>
+                        </div>
+                      )}
                   </div>
                 )}
               </div>
@@ -885,6 +870,45 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                   Complete Resolution
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Receipt Preview Modal */}
+      {showReceiptPreview && selectedRepair?.receiptUrl && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-8">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-harisco-blue/10 rounded flex items-center justify-center text-harisco-blue">
+                  <Eye size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Repair Receipt Preview</h3>
+                  <p className="text-[10px] text-slate-400 font-mono">REP-{selectedRepair.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReceiptPreview(false)}
+                className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6 bg-slate-100/50 flex justify-center">
+              {selectedRepair.receiptUrl.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={`${API_BASE.replace('/api', '')}${selectedRepair.receiptUrl}`}
+                  className="w-full h-full min-h-[70vh] rounded-lg shadow-lg"
+                  title="Receipt PDF"
+                />
+              ) : (
+                <img
+                  src={`${API_BASE.replace('/api', '')}${selectedRepair.receiptUrl}`}
+                  alt="Repair Receipt"
+                  className="max-w-full h-auto rounded-lg shadow-lg object-contain"
+                />
+              )}
             </div>
           </div>
         </div>

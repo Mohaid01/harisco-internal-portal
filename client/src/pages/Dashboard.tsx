@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Users,
   Smartphone,
@@ -79,29 +78,52 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
 
         const filteredUserDevices = dev.filter(
           (d: any) =>
-            d.assignedTo === userName || d.assignedTo === localStorage.getItem('userEmail'),
+            d.assignedTo &&
+            (d.assignedTo === userName || d.assignedTo === localStorage.getItem('userEmail')),
         )
         setUserDevices(filteredUserDevices)
 
         // Aggregate Inventory Stats
         const invSummary = [
-          { name: 'In Stock', value: dev.filter((d: any) => d.status === 'IN_STOCK').length, color: '#10b981' },
-          { name: 'Issued', value: dev.filter((d: any) => d.status === 'ISSUED').length, color: '#3b82f6' },
-          { name: 'In Repair', value: dev.filter((d: any) => d.status === 'REPAIR').length, color: '#f59e0b' },
-        ].filter(s => s.value > 0)
+          {
+            name: 'In Stock',
+            value: dev.filter((d: any) => d.status === 'IN_STOCK').length,
+            color: '#10b981',
+          },
+          {
+            name: 'Issued',
+            value: dev.filter((d: any) => d.status === 'ISSUED').length,
+            color: '#3b82f6',
+          },
+          {
+            name: 'In Repair',
+            value: dev.filter((d: any) => d.status === 'REPAIR').length,
+            color: '#f59e0b',
+          },
+        ].filter((s) => s.value > 0)
         setInventoryStats(invSummary)
 
         // Aggregate Active Requests for the user
-        const userRepairs = rep.filter((r: any) => 
-          r.requester === userName && r.status !== 'RESOLVED' && r.status !== 'REJECTED'
-        ).map((r: any) => ({ ...r, type: 'REPAIR' }))
-        
-        const userProcurements = pro.filter((p: any) => 
-          p.requester === userName && p.status !== 'PURCHASED' && p.status !== 'REJECTED'
-        ).map((p: any) => ({ ...p, type: 'PROCUREMENT' }))
+        const userRepairs = rep
+          .filter(
+            (r: any) =>
+              r.requester === userName && r.status !== 'RESOLVED' && r.status !== 'REJECTED',
+          )
+          .map((r: any) => ({ ...r, type: 'REPAIR' }))
+
+        const userProcurements = pro
+          .filter(
+            (p: any) =>
+              p.requestedBy === userName && p.status !== 'PURCHASED' && p.status !== 'REJECTED',
+          )
+          .map((p: any) => ({ ...p, type: 'PROCUREMENT' }))
 
         const allActive = [...userRepairs, ...userProcurements]
-          .sort((a, b) => new Date(b.createdAt || b.timestamp).getTime() - new Date(a.createdAt || a.timestamp).getTime())
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt || b.timestamp).getTime() -
+              new Date(a.createdAt || a.timestamp).getTime(),
+          )
           .slice(0, 5)
         setActiveRequests(allActive)
 
@@ -119,9 +141,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
           setStats({
             employees: emp.length,
             devices: dev.filter((d: any) => d.status === 'IN_STOCK').length,
-            repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED' && r.status !== 'RESOLVED')
-              .length,
-            procurements: pro.filter((p: any) => p.status !== 'PURCHASED' && p.status !== 'REJECTED').length,
+            repairs: rep.filter(
+              (r: any) =>
+                r.status !== 'APPROVED' && r.status !== 'REJECTED' && r.status !== 'RESOLVED',
+            ).length,
+            procurements: pro.filter(
+              (p: any) => p.status !== 'PURCHASED' && p.status !== 'REJECTED',
+            ).length,
           })
 
           // IT, Admin, and Manager see all logs
@@ -272,17 +298,23 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
 
   const getRequestStep = (req: any) => {
     const status = req.status
+    if (status === 'REJECTED') return 1
+    
+    // Calculate signature count
+    let sigs = 0
+    if (req.itApproved) sigs++
+    if (req.adminApproved) sigs++
+    if (req.managerApproved) sigs++
+
     if (req.type === 'REPAIR') {
-      if (status === 'PENDING_IT') return 1
-      if (status === 'PENDING_ADMIN' || status === 'PENDING_MANAGER') return 2
-      if (status === 'APPROVED' || status === 'IN_REPAIR') return 3
       if (status === 'RESOLVED') return 4
+      if (status === 'IN_REPAIR' || status === 'APPROVED') return 3
+      if (sigs > 0) return 2
       return 1
     } else {
-      if (status === 'PENDING_IT') return 1
-      if (status === 'PENDING_ADMIN' || status === 'PENDING_MANAGER') return 2
-      if (status === 'APPROVED') return 3
       if (status === 'PURCHASED') return 4
+      if (status === 'APPROVED') return 3
+      if (sigs > 0) return 2
       return 1
     }
   }
@@ -333,7 +365,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                       <div className="flex justify-between items-center mb-4">
                         <div>
                           <span className="text-[10px] font-bold text-harisco-blue uppercase tracking-widest px-2 py-0.5 bg-harisco-light rounded mb-1 inline-block">
-                            {req.type === 'REPAIR' ? `REPAIR: ${req.device?.model}` : `PROCUREMENT: ${req.item}`}
+                            {req.type === 'REPAIR'
+                              ? `REPAIR: ${req.device?.model}`
+                              : `PROCUREMENT: ${req.item}`}
                           </span>
                           <p className="text-xs text-slate-500 italic">
                             Current Status: {req.status.replace('_', ' ')}
@@ -343,28 +377,41 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                       <div className="flex justify-between relative">
                         {/* Progress Line */}
                         <div className="absolute top-4 left-0 w-full h-0.5 bg-slate-100 -z-0"></div>
-                        <div 
+                        <div
                           className="absolute top-4 left-0 h-0.5 bg-harisco-blue transition-all duration-500 -z-0"
                           style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
                         ></div>
-                        
+
                         {steps.map((step, idx) => {
                           const stepNum = idx + 1
                           const isCompleted = currentStep > stepNum
                           const isCurrent = currentStep === stepNum
-                          
+
                           return (
-                            <div key={step} className="flex flex-col items-center relative z-10 bg-white px-2">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors ${
-                                isCompleted ? 'bg-harisco-blue border-harisco-blue text-white' : 
-                                isCurrent ? 'bg-white border-harisco-blue text-harisco-blue' :
-                                'bg-white border-slate-200 text-slate-300'
-                              }`}>
-                                {isCompleted ? <CheckCircle2 size={16} /> : <span className="text-xs font-bold">{stepNum}</span>}
+                            <div
+                              key={step}
+                              className="flex flex-col items-center relative z-10 bg-white px-2"
+                            >
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors ${
+                                  isCompleted
+                                    ? 'bg-harisco-blue border-harisco-blue text-white'
+                                    : isCurrent
+                                      ? 'bg-white border-harisco-blue text-harisco-blue'
+                                      : 'bg-white border-slate-200 text-slate-300'
+                                }`}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle2 size={16} />
+                                ) : (
+                                  <span className="text-xs font-bold">{stepNum}</span>
+                                )}
                               </div>
-                              <span className={`text-[10px] mt-2 font-bold uppercase tracking-tighter ${
-                                isCurrent ? 'text-harisco-blue' : 'text-slate-400'
-                              }`}>
+                              <span
+                                className={`text-[10px] mt-2 font-bold uppercase tracking-tighter ${
+                                  isCurrent ? 'text-harisco-blue' : 'text-slate-400'
+                                }`}
+                              >
                                 {step}
                               </span>
                             </div>
@@ -418,7 +465,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-slate-400 py-12 text-sm">No activity recorded yet.</p>
+                <p className="text-center text-slate-400 py-12 text-sm">
+                  No activity recorded yet.
+                </p>
               )}
             </div>
           </div>
@@ -445,18 +494,27 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      }}
                       itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
                     />
-                    <Legend verticalAlign="bottom" height={36}/>
+                    <Legend verticalAlign="bottom" height={36} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2">
-                {inventoryStats.map(stat => (
-                  <div key={stat.name} className="text-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{stat.name}</p>
+                {inventoryStats.map((stat) => (
+                  <div
+                    key={stat.name}
+                    className="text-center p-2 rounded-lg bg-slate-50 border border-slate-100"
+                  >
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                      {stat.name}
+                    </p>
                     <p className="text-lg font-bold text-slate-900">{stat.value}</p>
                   </div>
                 ))}
@@ -471,7 +529,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                   <Smartphone size={18} className="text-harisco-blue" />
                   Your Devices
                 </h3>
-                <span className="text-[10px] text-slate-400 font-medium">{userDevices.length} Total</span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {userDevices.length} Total
+                </span>
               </div>
               <div className="space-y-3">
                 {userDevices.map((device) => (

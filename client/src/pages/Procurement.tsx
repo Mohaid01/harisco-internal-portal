@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { ShoppingCart, CheckCircle2, XCircle, Plus, Loader2, X, ShieldAlert } from 'lucide-react'
+import { ShoppingCart, CheckCircle2, XCircle, Plus, Loader2, X, ShieldAlert, Eye } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { API_BASE } from '../config'
@@ -8,11 +8,14 @@ import { useLoading } from '../context/LoadingContext'
 interface ProcurementRequest {
   id: number
   item: string
-  estimatedCost: string
-  requester: string
+  requestedBy: string
+  reason: string
   type: string
-  status: 'PENDING_IT' | 'PENDING_ADMIN' | 'PENDING_MANAGER' | 'APPROVED' | 'PURCHASED'
-
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PURCHASED'
+  itApproved: boolean
+  adminApproved: boolean
+  managerApproved: boolean
+  receiptUrl?: string
   createdAt: string
 }
 
@@ -24,32 +27,39 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   const { withLoading } = useLoading()
   const [showAddModal, setShowAddModal] = useState(false)
   const [showIntakeModal, setShowIntakeModal] = useState(false)
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null)
   const [requests, setRequests] = useState<ProcurementRequest[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Form states (New Request)
   const [item, setItem] = useState('')
-  const [cost, setCost] = useState('')
-  const [dept, setDept] = useState('Engineering')
+  const [requestedBy, setRequestedBy] = useState('')
+  const [reason, setReason] = useState('')
   const [type, setType] = useState('Laptop')
 
   // Intake states (Purchase Completion)
   const [intakeSerial, setIntakeSerial] = useState('')
   const [intakeModel, setIntakeModel] = useState('')
   const [intakeType, setIntakeType] = useState('Laptop')
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
 
-  const fetchRequests = async () => {
+  const fetchData = async () => {
     withLoading(async () => {
       try {
         const token = localStorage.getItem('token')
-        const res = await fetch(`${API_BASE}/procurement`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        setRequests(data)
+        const headers = { Authorization: `Bearer ${token}` }
+        const [procRes, empRes] = await Promise.all([
+          fetch(`${API_BASE}/procurement`, { headers }),
+          fetch(`${API_BASE}/employees`, { headers }),
+        ])
+        const procData = await procRes.json()
+        const empData = await empRes.json()
+        setRequests(procData)
+        setEmployees(empData)
       } catch (error) {
-        console.error('Failed to fetch procurement requests:', error)
+        console.error('Failed to fetch data:', error)
       } finally {
         setIsLoading(false)
       }
@@ -57,7 +67,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   }
 
   useEffect(() => {
-    fetchRequests()
+    fetchData()
   }, [])
 
   const handleSubmitRequest = async () => {
@@ -72,16 +82,17 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
           },
           body: JSON.stringify({
             item,
-            estimatedCost: cost,
-            requester: dept,
+            requestedBy,
+            reason,
             type,
           }),
         })
         if (res.ok) {
           setShowAddModal(false)
-          fetchRequests()
+          fetchData()
           setItem('')
-          setCost('')
+          setRequestedBy('')
+          setReason('')
           setType('Laptop')
         }
       } catch (error) {
@@ -90,7 +101,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     })
   }
 
-  const handleUpdateStatus = async (id: number, status: string) => {
+  const handleUpdateStatus = async (id: number, action: 'APPROVE' | 'REJECT') => {
     await withLoading(async () => {
       try {
         const token = localStorage.getItem('token')
@@ -100,11 +111,12 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
+          body: JSON.stringify({ action }),
         })
         if (res.ok) {
-          fetchRequests()
-          setSelectedRequest(null)
+          const updated = await res.json()
+          fetchData()
+          setSelectedRequest(updated)
         }
       } catch (error) {
         console.error('Failed to update status:', error)
@@ -118,27 +130,31 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     await withLoading(async () => {
       try {
         const token = localStorage.getItem('token')
+        const formData = new FormData()
+        formData.append('serial', intakeSerial)
+        formData.append('model', intakeModel)
+        formData.append('type', intakeType)
+        formData.append('performedBy', `${userRole} Authority`)
+        if (receiptFile) {
+          formData.append('receipt', receiptFile)
+        }
+
         const res = await fetch(`${API_BASE}/procurement/${selectedRequest.id}/intake`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            serial: intakeSerial,
-            model: intakeModel,
-            type: intakeType,
-            performedBy: `${userRole} Authority`,
-          }),
+          body: formData,
         })
 
         if (res.ok) {
           setShowIntakeModal(false)
-          fetchRequests()
+          fetchData()
           setSelectedRequest(null)
           setIntakeSerial('')
           setIntakeModel('')
           setIntakeType('Laptop')
+          setReceiptFile(null)
         }
       } catch (error) {
         console.error('Failed to process intake:', error)
@@ -146,24 +162,21 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
     })
   }
 
-  const canApprove = (status: string) => {
-    if (userRole === 'IT' && status === 'PENDING_IT') return true
-    if (userRole === 'Admin' && status === 'PENDING_ADMIN') return true
-    if (userRole === 'Manager' && (status === 'PENDING_MANAGER' || status === 'APPROVED'))
-      return true
+  const canApprove = (req: ProcurementRequest) => {
+    if (userRole === 'IT' && !req.itApproved) return true
+    if (userRole === 'Admin' && !req.adminApproved) return true
+    if (userRole === 'Manager' && !req.managerApproved) return true
     return false
   }
 
   const getStatusInfo = (status: ProcurementRequest['status']) => {
     switch (status) {
-      case 'PENDING_IT':
-        return { label: 'IT Review', color: 'bg-blue-100 text-blue-700' }
-      case 'PENDING_ADMIN':
-        return { label: 'Admin Approval', color: 'bg-purple-100 text-purple-700' }
-      case 'PENDING_MANAGER':
-        return { label: 'Manager Sign-off', color: 'bg-orange-100 text-orange-700' }
+      case 'PENDING':
+        return { label: 'Awaiting Approvals', color: 'bg-blue-100 text-blue-700' }
+      case 'REJECTED':
+        return { label: 'Rejected', color: 'bg-red-100 text-red-700' }
       case 'APPROVED':
-        return { label: 'Approved (To Purchase)', color: 'bg-green-100 text-green-700' }
+        return { label: 'Fully Approved', color: 'bg-green-100 text-green-700' }
       case 'PURCHASED':
         return { label: 'Purchased & Logged', color: 'bg-slate-100 text-slate-700' }
       default:
@@ -225,7 +238,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                           PRQ-{req.id} — {req.item}
                         </h4>
                         <p className="text-xs text-slate-500 mt-1">
-                          Requested by <span className="font-semibold">{req.requester}</span> •
+                          Requested by <span className="font-semibold">{req.requestedBy}</span> •
                           Type: {req.type}
                         </p>
                       </div>
@@ -251,37 +264,60 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                       PRQ-{selectedRequest.id}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-400 uppercase font-bold tracking-widest">
-                      Est. Cost
-                    </p>
-                    <p className="text-lg font-bold text-harisco-blue">
-                      {selectedRequest.estimatedCost.startsWith('Rs.')
-                        ? selectedRequest.estimatedCost
-                        : `Rs. ${selectedRequest.estimatedCost}`}
-                    </p>
-                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                  <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Item</span>
-                      <span className="font-semibold">{selectedRequest.item}</span>
+                      <span className="text-slate-500">Requested By</span>
+                      <span className="font-semibold">{selectedRequest.requestedBy}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Type</span>
                       <span className="font-semibold">{selectedRequest.type}</span>
                     </div>
+
+                    <div className="pt-3 border-t border-slate-200">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">Approval Checklist</p>
+                      <div className="flex flex-wrap gap-2">
+                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.itApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                          IT {selectedRequest.itApproved ? <CheckCircle2 size={12} /> : null}
+                        </div>
+                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.adminApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                          ADMIN {selectedRequest.adminApproved ? <CheckCircle2 size={12} /> : null}
+                        </div>
+                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.managerApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                          MANAGER {selectedRequest.managerApproved ? <CheckCircle2 size={12} /> : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="text-xs text-slate-400 uppercase font-bold mb-1">Reason</p>
+                      <p className="text-sm text-slate-700 leading-relaxed italic">
+                        "{selectedRequest.reason}"
+                      </p>
+                    </div>
+                    {selectedRequest.receiptUrl && (
+                      <div className="pt-2 border-t border-slate-200">
+                        <p className="text-xs text-slate-400 uppercase font-bold mb-2">Verification</p>
+                        <button
+                          onClick={() => setShowReceiptPreview(true)}
+                          className="flex items-center gap-2 text-xs text-harisco-blue font-bold hover:underline"
+                        >
+                          <Eye size={14} />
+                          Preview Purchase Receipt
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {selectedRequest.status === 'APPROVED' && (
                     <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
                       <p className="text-xs text-green-700 font-medium flex items-center gap-2">
                         <CheckCircle2 size={14} />
-                        This request is approved. Proceed to intake the new asset.
+                        Request fully approved. Proceed to intake.
                       </p>
-                      {userRole === 'Manager' || userRole === 'Admin' ? (
+                      {userRole === 'IT' || userRole === 'Admin' ? (
                         <Button
                           onClick={() => {
                             setIntakeModel(selectedRequest.item)
@@ -294,17 +330,15 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                         </Button>
                       ) : (
                         <p className="text-[10px] text-slate-400 italic mt-2">
-                          Only Admin/Manager can finalize intake.
+                          Only Admin or IT can finalize intake.
                         </p>
                       )}
                     </div>
                   )}
-                </div>
 
-                {selectedRequest.status !== 'APPROVED' &&
-                  selectedRequest.status !== 'PURCHASED' && (
+                  {selectedRequest.status === 'PENDING' && (
                     <div className="pt-4 border-t border-slate-100 space-y-3">
-                      {canApprove(selectedRequest.status) ? (
+                      {canApprove(selectedRequest) ? (
                         <div className="grid grid-cols-2 gap-3">
                           <Button
                             onClick={() => handleUpdateStatus(selectedRequest.id, 'REJECTED')}
@@ -312,19 +346,10 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                             className="w-full flex items-center justify-center gap-2 text-xs"
                           >
                             <XCircle size={16} />
-                            Reject
+                            Reject Request
                           </Button>
                           <Button
-                            onClick={() => {
-                              const stages = [
-                                'PENDING_IT',
-                                'PENDING_ADMIN',
-                                'PENDING_MANAGER',
-                                'APPROVED',
-                              ]
-                              const next = stages[stages.indexOf(selectedRequest.status) + 1]
-                              handleUpdateStatus(selectedRequest.id, next)
-                            }}
+                            onClick={() => handleUpdateStatus(selectedRequest.id, 'APPROVE')}
                             className="w-full flex items-center justify-center gap-2 text-xs"
                           >
                             <CheckCircle2 size={16} />
@@ -336,18 +361,19 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                           <ShieldAlert size={18} className="text-slate-400" />
                           <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
-                              Access Restricted
+                              Sign-off Required
                             </p>
                             <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
-                              You don't have authority to approve this stage (
-                              {selectedRequest.status.replace('PENDING_', '')}).
+                              {userRole === 'Employee' 
+                                ? 'Waiting for IT, Admin, and Manager sign-off.' 
+                                : 'You have already signed off or lack authority for this request.'}
                             </p>
                           </div>
                         </div>
                       )}
                     </div>
                   )}
-              </div>
+                </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center text-slate-400 space-y-4">
                 <ShoppingCart size={48} className="opacity-20" />
@@ -377,43 +403,48 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                 value={item}
                 onChange={(e) => setItem(e.target.value)}
               />
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Device Type
-                  </label>
-                  <select
-                    className="input appearance-none bg-white py-2"
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                  >
-                    <option>Laptop</option>
-                    <option>Monitor</option>
-                    <option>Mobile</option>
-                    <option>Other</option>
-                  </select>
-                </div>
-                <Input
-                  label="Est. Cost (Rs.)"
-                  placeholder="e.g. 150,000"
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                />
-              </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Requesting Department
+                  Device Type
                 </label>
                 <select
                   className="input appearance-none bg-white py-2"
-                  value={dept}
-                  onChange={(e) => setDept(e.target.value)}
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
                 >
-                  <option>Engineering</option>
-                  <option>HR</option>
-                  <option>Marketing</option>
-                  <option>Operations</option>
+                  <option>Laptop</option>
+                  <option>Monitor</option>
+                  <option>Mobile</option>
+                  <option>Other</option>
                 </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Requested By
+                </label>
+                <select
+                  className="input appearance-none bg-white py-2"
+                  value={requestedBy}
+                  onChange={(e) => setRequestedBy(e.target.value)}
+                >
+                  <option value="">Select Employee...</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.name}>
+                      {emp.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Reason for Request
+                </label>
+                <textarea
+                  className="input min-h-[100px] py-3 resize-none"
+                  placeholder="Explain why this equipment is needed..."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
               </div>
             </div>
             <div className="p-6 bg-slate-50 flex justify-end gap-3">
@@ -472,14 +503,62 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                   <option>Other</option>
                 </select>
               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Purchase Receipt (Image/PDF) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-harisco-light file:text-harisco-blue hover:file:bg-blue-100"
+                />
+              </div>
             </div>
             <div className="p-6 bg-slate-50 flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setShowIntakeModal(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleIntakeSubmit} disabled={!intakeSerial}>
+              <Button onClick={handleIntakeSubmit} disabled={!intakeSerial || !receiptFile}>
                 Finalize & Stock
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Receipt Preview Modal */}
+      {showReceiptPreview && selectedRequest?.receiptUrl && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Verification: Purchase Receipt</h3>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">PRQ-{selectedRequest.id} — {selectedRequest.item}</p>
+              </div>
+              <button
+                onClick={() => setShowReceiptPreview(false)}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 bg-slate-50 overflow-auto p-4 flex items-center justify-center">
+              {selectedRequest.receiptUrl.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={`${API_BASE.replace('/api', '')}${selectedRequest.receiptUrl}#toolbar=0`}
+                  className="w-full h-full rounded-lg shadow-sm border border-slate-200"
+                  title="Receipt Preview"
+                />
+              ) : (
+                <img
+                  src={`${API_BASE.replace('/api', '')}${selectedRequest.receiptUrl}`}
+                  alt="Receipt Preview"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                />
+              )}
+            </div>
+            <div className="p-4 bg-slate-50 text-center border-t border-slate-100">
+              <p className="text-[10px] text-slate-400">Viewing secure asset verification document.</p>
             </div>
           </div>
         </div>
