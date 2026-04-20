@@ -77,10 +77,10 @@ function App() {
             )
           }
         >
-          <Route path="dashboard" element={<Dashboard userRole={userRole} />} />
-          <Route path="employees" element={<Employees />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="procurement" element={<Procurement userRole={userRole} />} />
+          <Route path="dashboard" element={<Dashboard userRole={userRole} userName={userName} />} />
+          <Route path="employees" element={userRole === 'Employee' ? <Navigate to="/dashboard" replace /> : <Employees />} />
+          <Route path="inventory" element={userRole === 'Employee' ? <Navigate to="/dashboard" replace /> : <Inventory />} />
+          <Route path="procurement" element={userRole === 'Employee' ? <Navigate to="/dashboard" replace /> : <Procurement userRole={userRole} />} />
           <Route path="repairs" element={<Repairs userRole={userRole} userName={userName} />} />
           <Route
             path="users"
@@ -88,7 +88,7 @@ function App() {
           />
           <Route
             path="chat"
-            element={<Chat userId={userId} userName={userName} userRole={userRole} />}
+            element={userRole === 'Employee' ? <Navigate to="/dashboard" replace /> : <Chat userId={userId} userName={userName} userRole={userRole} />}
           />
         </Route>
 
