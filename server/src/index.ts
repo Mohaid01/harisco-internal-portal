@@ -828,8 +828,41 @@ app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: 
 
 app.get('/api/activity', async (req: any, res) => {
   if (req.user.role === 'Employee') {
+    const userName = req.user.name || '';
+    const userEmail = req.user.email || '';
+    const identifiers = [userName, userEmail].filter(i => i && i.length > 0);
+    
+    // Get all identifiers relevant to the employee
+    const repairs = await prisma.repair.findMany({ 
+      where: { requester: { in: identifiers } }, 
+      select: { id: true } 
+    });
+    const procs = await prisma.procurement.findMany({ 
+      where: { requester: { in: identifiers } }, 
+      select: { id: true } 
+    });
+    const devices = await prisma.device.findMany({ 
+      where: { assignedTo: { in: identifiers } }, 
+      select: { serial: true } 
+    });
+
+    const orConditions: any[] = [
+      { performedBy: { in: identifiers } }
+    ];
+
+    // Add fallback for name/email in details (to catch "Added employee: John Doe" etc)
+    identifiers.forEach(id => {
+      orConditions.push({ details: { contains: id } });
+    });
+
+    repairs.forEach(r => orConditions.push({ details: { contains: `REP-${r.id}` } }));
+    procs.forEach(p => orConditions.push({ details: { contains: `PRQ-${p.id}` } }));
+    devices.forEach(d => {
+      if (d.serial) orConditions.push({ details: { contains: d.serial } });
+    });
+
     const logs = await prisma.activityLog.findMany({
-      where: { performedBy: req.user.name || req.user.email },
+      where: { OR: orConditions },
       orderBy: { timestamp: 'desc' },
       take: 20,
     });

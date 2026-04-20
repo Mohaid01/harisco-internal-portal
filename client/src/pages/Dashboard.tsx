@@ -67,8 +67,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
             .length,
           procurements: pro.filter((p: any) => p.status !== 'PURCHASED' && p.requester === userName).length,
         })
-        setAllActivities(act.filter((a: any) => a.performedBy === userName))
-        setActivities(act.filter((a: any) => a.performedBy === userName).slice(0, 6))
+        setAllActivities(act)
+        setActivities(act.slice(0, 6))
       } else {
         setStats({
           employees: emp.length,
