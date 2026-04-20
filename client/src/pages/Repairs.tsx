@@ -497,7 +497,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                               Cost
                             </span>
                             <span className="font-medium text-emerald-900">
-                              {selectedRepair.repairCost}
+                              PKR {selectedRepair.repairCost}
                             </span>
                           </div>
                         </>
@@ -808,7 +808,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       className="input py-2"
                       value={repairCost}
                       onChange={(e) => setRepairCost(e.target.value)}
-                      placeholder="$250.00"
+                      placeholder="PKR 5,000"
                     />
                   </div>
                   <div className="space-y-1">
