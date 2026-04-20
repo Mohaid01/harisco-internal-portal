@@ -84,9 +84,10 @@ const triggerBackup = async () => {
 };
 
 // --- Activity Logger Helper ---
-const logActivity = async (action: string, details: string, performedBy: string = 'System') => {
+const logActivity = async (action: string, details: string, performedBy?: string | null) => {
+  const actor = performedBy || 'System';
   await prisma.activityLog.create({
-    data: { action, details, performedBy },
+    data: { action, details, performedBy: actor },
   });
 
   // Trigger backup on every system change/log
