@@ -105,10 +105,10 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `receipt-${Date.now()}${ext}`);
-  }
+  },
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
@@ -117,7 +117,7 @@ const upload = multer({
     } else {
       cb(new Error('Only images and PDFs are allowed'));
     }
-  }
+  },
 });
 
 // --- Session and Passport Configuration ---
@@ -177,7 +177,11 @@ passport.use(
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
 
-          await logActivity('LOGIN_BLOCKED', `Unauthorized login attempt blocked: ${email}`, 'System');
+          await logActivity(
+            'LOGIN_BLOCKED',
+            `Unauthorized login attempt blocked: ${email}`,
+            'System'
+          );
 
           return done(null, false, { message: 'You are not allowed. Please contact IT.' });
         }
@@ -208,7 +212,11 @@ app.post('/api/auth/local', async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    await logActivity('LOGIN', `User logged in via local dev bypass: ${user.email}`, user.name || user.email);
+    await logActivity(
+      'LOGIN',
+      `User logged in via local dev bypass: ${user.email}`,
+      user.name || user.email
+    );
     res.json({ token, role: user.role, name: user.name || user.email, userId: user.id });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
@@ -274,8 +282,6 @@ const authorizeRoles = (...allowedRoles: string[]) => {
 
 // ... inside API routes section ...
 // These will be added after the authenticateToken middleware is applied to /api
-
-
 
 // Manual backup endpoint (optional)
 app.post('/api/admin/backup', (req, res) => {
@@ -508,12 +514,9 @@ app.get('/api/inventory', async (req: any, res) => {
   if (req.user.role === 'Employee') {
     const devices = await prisma.device.findMany({
       where: {
-        OR: [
-          { assignedTo: req.user.email },
-          { assignedTo: req.user.name || '' }
-        ]
+        OR: [{ assignedTo: req.user.email }, { assignedTo: req.user.name || '' }],
       },
-      include: { repairs: true }
+      include: { repairs: true },
     });
     return res.json(devices);
   }
@@ -567,7 +570,7 @@ app.post('/api/inventory/:id/issue', async (req: any, res) => {
 app.get('/api/procurement', async (req: any, res) => {
   if (req.user.role === 'Employee') {
     const requests = await prisma.procurement.findMany({
-      where: { requester: req.user.name || req.user.email }
+      where: { requester: req.user.name || req.user.email },
     });
     return res.json(requests);
   }
@@ -581,7 +584,11 @@ app.post('/api/procurement', async (req, res) => {
     const procurement = await prisma.procurement.create({
       data: { item, estimatedCost, requester, type, status: 'PENDING_IT' },
     });
-    await logActivity('CREATE_PROCUREMENT', `Requested: ${item} (Est: ${estimatedCost})`, req.user?.name);
+    await logActivity(
+      'CREATE_PROCUREMENT',
+      `Requested: ${item} (Est: ${estimatedCost})`,
+      req.user?.name
+    );
 
     // Notify all IT users
     const itUsers = await prisma.user.findMany({ where: { role: 'IT' } });
@@ -614,7 +621,11 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
       where: { id: parseInt(id) },
       data: { status },
     });
-    await logActivity('UPDATE_PROCUREMENT_STATUS', `Updated PRQ-${id} to ${status}`, req.user?.name);
+    await logActivity(
+      'UPDATE_PROCUREMENT_STATUS',
+      `Updated PRQ-${id} to ${status}`,
+      req.user?.name
+    );
 
     // Send email notification
     await sendStatusEmail(
@@ -644,7 +655,11 @@ app.post('/api/procurement/:id/intake', async (req: any, res) => {
       data: { status: 'PURCHASED' },
     });
 
-    await logActivity('PROCUREMENT_INTAKE', `Stocked ${model} [${serial}] from PRQ-${id}`, req.user?.name);
+    await logActivity(
+      'PROCUREMENT_INTAKE',
+      `Stocked ${model} [${serial}] from PRQ-${id}`,
+      req.user?.name
+    );
     res.json({ device, request });
   } catch (error) {
     res.status(500).json({ error: 'Failed to process intake' });
@@ -656,7 +671,7 @@ app.get('/api/repairs', async (req: any, res) => {
   if (req.user.role === 'Employee') {
     const repairs = await prisma.repair.findMany({
       where: { requester: req.user.name || req.user.email },
-      include: { device: true }
+      include: { device: true },
     });
     return res.json(repairs);
   }
@@ -676,6 +691,11 @@ app.post('/api/repairs', async (req: any, res) => {
 
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
+    }
+
+    // Restriction: Cannot request repair for a device already in the repair workflow
+    if (device.status === 'REPAIR') {
+      return res.status(400).json({ error: 'This device is already in the repair workflow.' });
     }
 
     // Restriction: Employees can only request repairs for their OWN assigned devices
@@ -773,7 +793,7 @@ app.patch('/api/repairs/:id/in-repair', async (req: any, res) => {
 app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: any, res: any) => {
   const { id } = req.params;
   const { repairType, fixDetails, partsReplaced, vendorName, vendorContact, repairCost } = req.body;
-  
+
   if (!repairType || !fixDetails) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -784,7 +804,7 @@ app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: 
 
   try {
     const receiptUrl = req.file ? `/uploads/${req.file.filename}` : null;
-    
+
     if (repairType === 'VENDOR' && !receiptUrl) {
       return res.status(400).json({ error: 'Vendor repair requires a receipt upload' });
     }
@@ -823,24 +843,22 @@ app.get('/api/activity', async (req: any, res) => {
     const userName = req.user.name || '';
     const userEmail = req.user.email || '';
     const identifiers = [userName, userEmail].filter(i => i && i.length > 0);
-    
+
     // Get all identifiers relevant to the employee
-    const repairs = await prisma.repair.findMany({ 
-      where: { requester: { in: identifiers } }, 
-      select: { id: true } 
+    const repairs = await prisma.repair.findMany({
+      where: { requester: { in: identifiers } },
+      select: { id: true },
     });
-    const procs = await prisma.procurement.findMany({ 
-      where: { requester: { in: identifiers } }, 
-      select: { id: true } 
+    const procs = await prisma.procurement.findMany({
+      where: { requester: { in: identifiers } },
+      select: { id: true },
     });
-    const devices = await prisma.device.findMany({ 
-      where: { assignedTo: { in: identifiers } }, 
-      select: { serial: true } 
+    const devices = await prisma.device.findMany({
+      where: { assignedTo: { in: identifiers } },
+      select: { serial: true },
     });
 
-    const orConditions: any[] = [
-      { performedBy: { in: identifiers } }
-    ];
+    const orConditions: any[] = [{ performedBy: { in: identifiers } }];
 
     // Add fallback for name/email in details (to catch "Added employee: John Doe" etc)
     identifiers.forEach(id => {

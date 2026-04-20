@@ -15,6 +15,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 import { API_BASE } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface ActivityLog {
   id: number
@@ -30,6 +31,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
+  const { withLoading } = useLoading()
   const [stats, setStats] = useState({
     employees: 0,
     devices: 0,
@@ -46,52 +48,58 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
   const [filterTimeRange, setFilterTimeRange] = useState('ALL')
 
   const fetchData = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const headers = { Authorization: `Bearer ${token}` }
+    withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const headers = { Authorization: `Bearer ${token}` }
 
-      const [emp, dev, rep, pro, act] = await Promise.all([
-        fetch(`${API_BASE}/employees`, { headers }).then((r) => r.json()),
-        fetch(`${API_BASE}/inventory`, { headers }).then((r) => r.json()),
-        fetch(`${API_BASE}/repairs`, { headers }).then((r) => r.json()),
-        fetch(`${API_BASE}/procurement`, { headers }).then((r) => r.json()),
-        fetch(`${API_BASE}/activity`, { headers }).then((r) => r.json()),
-      ])
+        const [emp, dev, rep, pro, act] = await Promise.all([
+          fetch(`${API_BASE}/employees`, { headers }).then((r) => r.json()),
+          fetch(`${API_BASE}/inventory`, { headers }).then((r) => r.json()),
+          fetch(`${API_BASE}/repairs`, { headers }).then((r) => r.json()),
+          fetch(`${API_BASE}/procurement`, { headers }).then((r) => r.json()),
+          fetch(`${API_BASE}/activity`, { headers }).then((r) => r.json()),
+        ])
 
-      if (userRole === 'Employee') {
-        // Employees only see their own repairs and procurements
-        setStats({
-          employees: 0,
-          devices: 0,
-          repairs: rep.filter((r: any) => (r.status !== 'APPROVED' && r.status !== 'REJECTED') && r.requester === userName)
-            .length,
-          procurements: pro.filter((p: any) => p.status !== 'PURCHASED' && p.requester === userName).length,
-        })
-        setAllActivities(act)
-        setActivities(act.slice(0, 6))
-      } else {
-        setStats({
-          employees: emp.length,
-          devices: dev.filter((d: any) => d.status === 'IN_STOCK').length,
-          repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED')
-            .length,
-          procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length,
-        })
-
-        // IT, Admin, and Manager see all logs
-        if (userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') {
+        if (userRole === 'Employee') {
+          // Employees only see their own repairs and procurements
+          setStats({
+            employees: 0,
+            devices: 0,
+            repairs: rep.filter(
+              (r: any) =>
+                r.status !== 'APPROVED' && r.status !== 'REJECTED' && r.requester === userName,
+            ).length,
+            procurements: pro.filter(
+              (p: any) => p.status !== 'PURCHASED' && p.requester === userName,
+            ).length,
+          })
           setAllActivities(act)
           setActivities(act.slice(0, 6))
         } else {
-          setAllActivities([])
-          setActivities([])
+          setStats({
+            employees: emp.length,
+            devices: dev.filter((d: any) => d.status === 'IN_STOCK').length,
+            repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED')
+              .length,
+            procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length,
+          })
+
+          // IT, Admin, and Manager see all logs
+          if (userRole === 'IT' || userRole === 'Admin' || userRole === 'Manager') {
+            setAllActivities(act)
+            setActivities(act.slice(0, 6))
+          } else {
+            setAllActivities([])
+            setActivities([])
+          }
         }
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error)
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    })
   }
 
   useEffect(() => {
@@ -194,7 +202,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
 
     doc.setFontSize(11)
     doc.setTextColor(100)
-    doc.text(`Generated on: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}`, 14, 30)
+    doc.text(
+      `Generated on: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}`,
+      14,
+      30,
+    )
     doc.text(`Filters: Time (${filterTimeRange}) | Type (${filterType})`, 14, 36)
 
     const tableData = filteredActivities.map((act) => [
@@ -243,51 +255,50 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Activities */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <Activity size={18} className="text-harisco-blue" />
-                Recent Activity Log
-              </h3>
-                <button
-                  onClick={() => setShowAllModal(true)}
-                  className="text-xs text-harisco-blue font-bold hover:underline"
-                >
-                  View All
-                </button>
-            </div>
-            <div className="space-y-6">
-              {activities.length > 0 ? (
-                activities.map((act) => (
-                  <div key={act.id} className="flex gap-4 group">
-                    <div
-                      className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${act.action === 'LOGOUT' ? 'bg-red-400' : 'bg-harisco-blue'} group-hover:scale-125 transition-transform`}
-                    ></div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <p className="text-sm text-slate-800 leading-snug">
-                          <span className="font-bold text-slate-900">{act.action}:</span>{' '}
-                          {act.details}
-                        </p>
-                        <span className="text-[10px] text-slate-400 font-medium ml-2 whitespace-nowrap">
-                          {formatRelativeTime(act.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1 opacity-70">
-                        {act.details.toLowerCase().includes('inactivity') || act.details.toLowerCase().includes('auto') 
-                          ? `Auto Performed by: ${act.performedBy || 'System'}`
-                          : `Performed by: ${act.performedBy || 'System'}`}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-slate-400 py-12 text-sm">
-                  No activity recorded yet.
-                </p>
-              )}
-            </div>
+        <div className="card">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <Activity size={18} className="text-harisco-blue" />
+              Recent Activity Log
+            </h3>
+            <button
+              onClick={() => setShowAllModal(true)}
+              className="text-xs text-harisco-blue font-bold hover:underline"
+            >
+              View All
+            </button>
           </div>
+          <div className="space-y-6">
+            {activities.length > 0 ? (
+              activities.map((act) => (
+                <div key={act.id} className="flex gap-4 group">
+                  <div
+                    className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${act.action === 'LOGOUT' ? 'bg-red-400' : 'bg-harisco-blue'} group-hover:scale-125 transition-transform`}
+                  ></div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <p className="text-sm text-slate-800 leading-snug">
+                        <span className="font-bold text-slate-900">{act.action}:</span>{' '}
+                        {act.details}
+                      </p>
+                      <span className="text-[10px] text-slate-400 font-medium ml-2 whitespace-nowrap">
+                        {formatRelativeTime(act.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1 opacity-70">
+                      {act.details.toLowerCase().includes('inactivity') ||
+                      act.details.toLowerCase().includes('auto')
+                        ? `Auto Performed by: ${act.performedBy || 'System'}`
+                        : `Performed by: ${act.performedBy || 'System'}`}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-slate-400 py-12 text-sm">No activity recorded yet.</p>
+            )}
+          </div>
+        </div>
 
         <div className="space-y-6">
           <div className="card bg-slate-900 text-white border-none shadow-harisco overflow-hidden relative">
@@ -417,7 +428,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
                     filteredActivities.map((act) => (
                       <tr key={act.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-xs font-mono text-slate-400">
-                          {new Date(act.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}
+                          {new Date(act.timestamp).toLocaleString('en-US', {
+                            timeZone: 'Asia/Karachi',
+                          })}
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-xs font-bold text-harisco-blue uppercase tracking-tight bg-harisco-light px-2 py-0.5 rounded">

@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react'
-import { Wrench, CheckCircle2, XCircle, Clock, Loader2, Plus, X, ShieldAlert, ClipboardCheck } from 'lucide-react'
+import {
+  Wrench,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Loader2,
+  Plus,
+  X,
+  ShieldAlert,
+  ClipboardCheck,
+} from 'lucide-react'
 import Button from '../components/ui/Button'
+import { API_BASE } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface Device {
   id: number
@@ -46,9 +58,8 @@ interface RepairsProps {
   userName: string
 }
 
-import { API_BASE } from '../config'
-
 const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
+  const { withLoading } = useLoading()
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedRepair, setSelectedRepair] = useState<RepairRequest | null>(null)
   const [repairs, setRepairs] = useState<RepairRequest[]>([])
@@ -72,32 +83,34 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
 
   const fetchRepairs = async () => {
-    try {
-      setIsLoading(true)
-      const token = localStorage.getItem('token')
-      const headers = { Authorization: `Bearer ${token}` }
-      const [repRes, devRes, empRes] = await Promise.all([
-        fetch(`${API_BASE}/repairs`, { headers }),
-        fetch(`${API_BASE}/inventory`, { headers }),
-        fetch(`${API_BASE}/employees`, { headers }),
-      ])
-      const [repData, devData, empData] = await Promise.all([
-        repRes.json(),
-        devRes.json(),
-        empRes.json(),
-      ])
-      if (userRole === 'Employee') {
-        setRepairs(repData.filter((r: any) => r.requester === userName))
-      } else {
-        setRepairs(repData)
+    withLoading(async () => {
+      try {
+        setIsLoading(true)
+        const token = localStorage.getItem('token')
+        const headers = { Authorization: `Bearer ${token}` }
+        const [repRes, devRes, empRes] = await Promise.all([
+          fetch(`${API_BASE}/repairs`, { headers }),
+          fetch(`${API_BASE}/inventory`, { headers }),
+          fetch(`${API_BASE}/employees`, { headers }),
+        ])
+        const [repData, devData, empData] = await Promise.all([
+          repRes.json(),
+          devRes.json(),
+          empRes.json(),
+        ])
+        if (userRole === 'Employee') {
+          setRepairs(repData.filter((r: any) => r.requester === userName))
+        } else {
+          setRepairs(repData)
+        }
+        setDevices(devData)
+        setEmployees(empData)
+      } catch (error) {
+        console.error('Failed to fetch repairs:', error)
+      } finally {
+        setIsLoading(false)
       }
-      setDevices(devData)
-      setEmployees(empData)
-    } catch (error) {
-      console.error('Failed to fetch repairs:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    })
   }
 
   useEffect(() => {
@@ -105,39 +118,43 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
   }, [])
 
   const handleUpdateStatus = async (id: number, status: string) => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/repairs/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
-      })
-      if (res.ok) {
-        fetchRepairs()
-        setSelectedRepair(null)
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/repairs/${id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status, performedBy: `${userRole} Authority` }),
+        })
+        if (res.ok) {
+          fetchRepairs()
+          setSelectedRepair(null)
+        }
+      } catch (error) {
+        console.error('Failed to update status:', error)
       }
-    } catch (error) {
-      console.error('Failed to update status:', error)
-    }
+    })
   }
 
   const handleInRepair = async (id: number) => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/repairs/${id}/in-repair`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        fetchRepairs()
-        setSelectedRepair(null)
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/repairs/${id}/in-repair`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          fetchRepairs()
+          setSelectedRepair(null)
+        }
+      } catch (error) {
+        console.error('Failed to mark as in-repair:', error)
       }
-    } catch (error) {
-      console.error('Failed to mark as in-repair:', error)
-    }
+    })
   }
 
   const handleResolveSubmit = async () => {
@@ -157,64 +174,68 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
       }
     }
 
-    try {
-      const res = await fetch(`${API_BASE}/repairs/${selectedRepair.id}/resolve`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      })
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/repairs/${selectedRepair.id}/resolve`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        })
 
-      if (res.ok) {
-        setShowResolveModal(false)
-        fetchRepairs()
-        setSelectedRepair(null)
-        // Reset form
-        setRepairType('IN_HOUSE')
-        setFixDetails('')
-        setPartsReplaced('')
-        setVendorName('')
-        setVendorContact('')
-        setRepairCost('')
-        setReceiptFile(null)
-      } else {
-        console.error('Failed to resolve repair')
+        if (res.ok) {
+          setShowResolveModal(false)
+          fetchRepairs()
+          setSelectedRepair(null)
+          // Reset form
+          setRepairType('IN_HOUSE')
+          setFixDetails('')
+          setPartsReplaced('')
+          setVendorName('')
+          setVendorContact('')
+          setRepairCost('')
+          setReceiptFile(null)
+        } else {
+          console.error('Failed to resolve repair')
+        }
+      } catch (error) {
+        console.error('Failed to submit resolution:', error)
       }
-    } catch (error) {
-      console.error('Failed to submit resolution:', error)
-    }
+    })
   }
 
   const handleNewRepairSubmit = async () => {
     const finalRequester = userRole === 'Employee' ? userName : requester
     if (!selectedDevice || !finalRequester || !description) return
 
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/repairs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          deviceId: selectedDevice.id,
-          requester: finalRequester,
-          description,
-          performedBy: `${userRole} Authority`,
-        }),
-      })
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/repairs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            deviceId: selectedDevice.id,
+            requester: finalRequester,
+            description,
+            performedBy: `${userRole} Authority`,
+          }),
+        })
 
-      if (res.ok) {
-        setShowAddModal(false)
-        fetchRepairs()
-        // Reset form
-        setSelectedDevice(null)
-        setRequester('')
-        setDescription('')
+        if (res.ok) {
+          setShowAddModal(false)
+          fetchRepairs()
+          // Reset form
+          setSelectedDevice(null)
+          setRequester('')
+          setDescription('')
+        }
+      } catch (error) {
+        console.error('Failed to submit repair:', error)
       }
-    } catch (error) {
-      console.error('Failed to submit repair:', error)
-    }
+    })
   }
 
   const canApprove = (status: string) => {
@@ -566,7 +587,9 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                     )}
 
                   {selectedRepair.status === 'APPROVED' && ['IT', 'Admin'].includes(userRole) && (
-                    <div className={`grid ${userRole === 'IT' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                    <div
+                      className={`grid ${userRole === 'IT' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}
+                    >
                       {userRole === 'IT' && (
                         <Button
                           onClick={() => {
@@ -646,10 +669,11 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                   {(userRole === 'Employee'
                     ? devices.filter(
                         (d) =>
-                          d.assignedTo === userName ||
-                          d.assignedTo === localStorage.getItem('userEmail'),
-                      ) // Check both just in case
-                    : devices
+                          (d.assignedTo === userName ||
+                            d.assignedTo === localStorage.getItem('userEmail')) &&
+                          d.status !== 'REPAIR',
+                      )
+                    : devices.filter((d) => d.status !== 'REPAIR')
                   ).map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.model} — {d.serial}
@@ -660,6 +684,14 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                   devices.filter((d) => d.assignedTo === userName).length === 0 && (
                     <p className="text-[10px] text-orange-600 font-medium">
                       No devices are currently issued to you.
+                    </p>
+                  )}
+                {userRole === 'Employee' &&
+                  devices.filter((d) => d.assignedTo === userName).length > 0 &&
+                  devices.filter((d) => d.assignedTo === userName && d.status !== 'REPAIR')
+                    .length === 0 && (
+                    <p className="text-[10px] text-amber-600 font-medium">
+                      All your issued devices are already in the repair workflow.
                     </p>
                   )}
               </div>

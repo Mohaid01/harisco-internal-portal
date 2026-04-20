@@ -1,100 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, MoreVertical, Mail, Building2, Loader2, Phone, CreditCard } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import { API_BASE } from '../config';
+import React, { useState, useEffect } from 'react'
+import {
+  Search,
+  Plus,
+  MoreVertical,
+  Mail,
+  Building2,
+  Loader2,
+  Phone,
+  CreditCard,
+} from 'lucide-react'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import { API_BASE } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface Employee {
-  id: number;
-  name: string;
-  email: string;
-  cnic: string;
-  phoneNumber: string;
-  department: string;
-  designation: string;
+  id: number
+  name: string
+  email: string
+  cnic: string
+  phoneNumber: string
+  department: string
+  designation: string
 }
 
-const DEPARTMENTS = ['Engineering', 'Operations', 'IT', 'HR', 'Marketing', 'Finance', 'Logistics'];
-const DESIGNATIONS = ['Manager', 'Developer', 'Lead', 'Executive', 'Intern', 'Accountant', 'Officer'];
+const DEPARTMENTS = ['Engineering', 'Operations', 'IT', 'HR', 'Marketing', 'Finance', 'Logistics']
+const DESIGNATIONS = [
+  'Manager',
+  'Developer',
+  'Lead',
+  'Executive',
+  'Intern',
+  'Accountant',
+  'Officer',
+]
 
 const Employees: React.FC = () => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { withLoading } = useLoading()
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   // Form states
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [cnic, setCnic] = useState('');
-  const [phone, setPhone] = useState('');
-  const [dept, setDept] = useState(DEPARTMENTS[0]);
-  const [designation, setDesignation] = useState(DESIGNATIONS[0]);
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [cnic, setCnic] = useState('')
+  const [phone, setPhone] = useState('')
+  const [dept, setDept] = useState(DEPARTMENTS[0])
+  const [designation, setDesignation] = useState(DESIGNATIONS[0])
 
   const fetchEmployees = async () => {
-    try {
-      setIsLoading(true);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/employees`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setEmployees(data);
-    } catch (error) {
-      console.error('Failed to fetch employees:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    withLoading(async () => {
+      try {
+        setIsLoading(true)
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/employees`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        setEmployees(data)
+      } catch (error) {
+        console.error('Failed to fetch employees:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    })
+  }
 
   useEffect(() => {
-    fetchEmployees();
-  }, []);
+    fetchEmployees()
+  }, [])
 
   const handleAddEmployee = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/employees`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          name, 
-          email, 
-          cnic, 
-          phoneNumber: phone, 
-          department: dept, 
-          designation 
-        }),
-      });
-      if (res.ok) {
-        setShowAddModal(false);
-        fetchEmployees();
-        // Clear form
-        setName(''); setEmail(''); setCnic(''); setPhone(''); 
-        setDept(DEPARTMENTS[0]); setDesignation(DESIGNATIONS[0]);
+    await withLoading(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_BASE}/employees`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name,
+            email,
+            cnic,
+            phoneNumber: phone,
+            department: dept,
+            designation,
+          }),
+        })
+        if (res.ok) {
+          setShowAddModal(false)
+          fetchEmployees()
+          // Clear form
+          setName('')
+          setEmail('')
+          setCnic('')
+          setPhone('')
+          setDept(DEPARTMENTS[0])
+          setDesignation(DESIGNATIONS[0])
+        }
+      } catch (error) {
+        console.error('Failed to add employee:', error)
       }
-    } catch (error) {
-      console.error('Failed to add employee:', error);
-    }
-  };
+    })
+  }
 
-  const filteredEmployees = employees.filter(emp => 
-    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.department.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(
+    (emp) =>
+      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.department.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="relative w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Search employees..." 
+          <input
+            type="text"
+            placeholder="Search employees..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-harisco-blue/10 focus:border-harisco-blue transition-all"
@@ -110,9 +138,15 @@ const Employees: React.FC = () => {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contact Info</th>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Department</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Employee
+              </th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Contact Info
+              </th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Department
+              </th>
               <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider"></th>
             </tr>
           </thead>
@@ -191,45 +225,80 @@ const Employees: React.FC = () => {
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Full Name" placeholder="e.g. Haris Ahmed" value={name} onChange={e => setName(e.target.value)} />
-                <Input label="Email Address" type="email" placeholder="e.g. haris@harisco.com" value={email} onChange={e => setEmail(e.target.value)} />
+                <Input
+                  label="Full Name"
+                  placeholder="e.g. Haris Ahmed"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <Input
+                  label="Email Address"
+                  type="email"
+                  placeholder="e.g. haris@harisco.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Input label="CNIC Number" placeholder="e.g. 42101-XXXXXXX-X" value={cnic} onChange={e => setCnic(e.target.value)} />
-                <Input label="Phone Number" placeholder="e.g. 0300-XXXXXXX" value={phone} onChange={e => setPhone(e.target.value)} />
+                <Input
+                  label="CNIC Number"
+                  placeholder="e.g. 42101-XXXXXXX-X"
+                  value={cnic}
+                  onChange={(e) => setCnic(e.target.value)}
+                />
+                <Input
+                  label="Phone Number"
+                  placeholder="e.g. 0300-XXXXXXX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Department</label>
-                  <select 
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Department
+                  </label>
+                  <select
                     className="input appearance-none bg-white py-2"
                     value={dept}
                     onChange={(e) => setDept(e.target.value)}
                   >
-                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    {DEPARTMENTS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Designation</label>
-                  <select 
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Designation
+                  </label>
+                  <select
                     className="input appearance-none bg-white py-2"
                     value={designation}
                     onChange={(e) => setDesignation(e.target.value)}
                   >
-                    {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    {DESIGNATIONS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
             </div>
             <div className="p-6 bg-slate-50 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
               <Button onClick={handleAddEmployee}>Save Employee</Button>
             </div>
           </div>
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default Employees;
+export default Employees

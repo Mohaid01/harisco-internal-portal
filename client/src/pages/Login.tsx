@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AUTH_BASE, API_BASE } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface LoginProps {
   onLogin: (role: any, name: string, userId: string) => void
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const { withLoading } = useLoading()
   const navigate = useNavigate()
   const location = useLocation()
   const [error, setError] = useState('')
@@ -18,25 +20,27 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const handleLocalLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: localUsername }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('userName', data.name || '')
-        localStorage.setItem('userId', String(data.userId))
-        onLogin(data.role, data.name || '', String(data.userId))
-        navigate('/dashboard')
-      } else {
-        setError(data.error || 'Login failed')
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/local`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: localUsername }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          localStorage.setItem('token', data.token)
+          localStorage.setItem('userName', data.name || '')
+          localStorage.setItem('userId', String(data.userId))
+          onLogin(data.role, data.name || '', String(data.userId))
+          navigate('/dashboard')
+        } else {
+          setError(data.error || 'Login failed')
+        }
+      } catch (err) {
+        setError('Network error during login')
       }
-    } catch (err) {
-      setError('Network error during login')
-    }
+    })
   }
 
   useEffect(() => {
