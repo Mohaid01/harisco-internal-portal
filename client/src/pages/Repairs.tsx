@@ -249,29 +249,37 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
   const getStatusInfo = (status: RepairRequest['status']) => {
     switch (status) {
       case 'PENDING':
-        return { label: 'Awaiting Approvals', icon: <Clock size={14} />, color: 'bg-blue-100 text-blue-700' }
+        return { 
+          label: 'Awaiting Approvals', 
+          icon: <Clock size={14} />, 
+          color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
+        }
       case 'REJECTED':
-        return { label: 'Rejected', icon: <XCircle size={14} />, color: 'bg-red-100 text-red-700' }
+        return { 
+          label: 'Rejected', 
+          icon: <XCircle size={14} />, 
+          color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' 
+        }
       case 'APPROVED':
         return {
           label: 'Fully Approved',
           icon: <ClipboardCheck size={14} />,
-          color: 'bg-green-100 text-green-700',
+          color: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
         }
       case 'IN_REPAIR':
         return {
           label: 'In Repair',
           icon: <Wrench size={14} />,
-          color: 'bg-indigo-100 text-indigo-700',
+          color: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300',
         }
       case 'RESOLVED':
         return {
           label: 'Resolved',
           icon: <CheckCircle2 size={14} />,
-          color: 'bg-emerald-100 text-emerald-700',
+          color: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
         }
       default:
-        return { label: status, icon: <Clock size={14} />, color: 'bg-slate-100' }
+        return { label: status, icon: <Clock size={14} />, color: 'bg-slate-100 dark:bg-slate-800' }
     }
   }
 

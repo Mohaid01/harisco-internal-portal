@@ -8,15 +8,35 @@
 
 :root {
   --harisco-blue: #004A99;
+  --bg-body: #f8fafc; /* slate-50 */
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --text-main: #0f172a; /* slate-900 */
+  --text-muted: #64748b; /* slate-500 */
+  --border-color: #e2e8f0; /* slate-200 */
+  --border-input: #d1d5db; /* gray-300 */
+}
+
+.dark {
+  --bg-body: #0f172a; /* slate-900 */
+  --bg-card: #1e293b; /* slate-800 */
+  --bg-input: #334155; /* slate-700 */
+  --text-main: #f8fafc; /* slate-50 */
+  --text-muted: #94a3b8; /* slate-400 */
+  --border-color: #334155; /* slate-700 */
+  --border-input: #475569; /* slate-600 */
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  @apply antialiased transition-colors duration-300;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  @apply font-semibold text-slate-800;
+  color: var(--text-main);
+  @apply font-semibold;
 }
 
 .btn {
@@ -28,13 +48,106 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-secondary {
-  @apply bg-white text-slate-700 border border-slate-200 hover:bg-slate-50;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  @apply hover:opacity-80;
 }
 
 .card {
-  @apply bg-white border border-slate-200 rounded-lg shadow-sm p-6;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  @apply rounded-lg shadow-sm p-6 transition-colors duration-300;
 }
 
 .input {
-  @apply w-full px-3 py-2 bg-white border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-harisco-blue/20 focus:border-harisco-blue transition-all;
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border-input);
+  @apply w-full px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-harisco-blue/20 focus:border-harisco-blue transition-all;
+}
+
+/* Custom scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Global Dark Mode Overrides for hardcoded Tailwind classes */
+.dark .bg-slate-50, 
+.dark .bg-slate-50\/50, 
+.dark .bg-slate-50\/30 {
+  background-color: var(--bg-body) !important;
+}
+
+.dark .bg-white {
+  background-color: var(--bg-card) !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: var(--text-main) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+/* Explicitly dim labels in dark mode to prevent merging with main text */
+.dark label,
+.dark .label {
+  color: var(--text-muted) !important;
+  opacity: 0.85;
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: var(--border-color) !important;
+}
+
+.dark .divide-slate-100 > * + * {
+  border-color: var(--border-color) !important;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Global Interactivity & Refinements */
+button, 
+[role="button"],
+a,
+input[type="submit"],
+select,
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Fix for Search Placeholders */
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.5 !important;
+  font-style: italic;
+}
+
+/* Badge/Label Refinements for Dark Mode */
+.dark .bg-gray-100, 
+.dark .bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-main) !important;
 }

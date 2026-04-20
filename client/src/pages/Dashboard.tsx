@@ -330,17 +330,29 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
     )
   }
 
+  const getStatColors = (label: string) => {
+    switch (label) {
+      case 'Total Employees': return 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'
+      case 'Devices in Stock': return 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400'
+      case 'Active Repairs': return 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      case 'Pending Procurements': return 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+      default: return 'bg-slate-50 dark:bg-slate-500/10 text-slate-600 dark:text-slate-400'
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat) => (
           <div key={stat.label} className="card flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-              <p className="text-2xl font-bold text-slate-900 mt-1">{stat.value}</p>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{stat.label}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-50 mt-1">{stat.value}</p>
               <p className="text-xs text-slate-400 mt-2">{stat.trend}</p>
             </div>
-            <div className="p-3 bg-slate-50 rounded-lg">{stat.icon}</div>
+            <div className={`p-3 rounded-lg [&>svg]:w-6 [&>svg]:h-6 ${getStatColors(stat.label)}`}>
+              {stat.icon}
+            </div>
           </div>
         ))}
       </div>
