@@ -147,8 +147,9 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
+          const updated = await res.json()
           fetchRepairs()
-          setSelectedRepair(null)
+          setSelectedRepair(updated)
         }
       } catch (error) {
         console.error('Failed to mark as in-repair:', error)
@@ -426,12 +427,27 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       Request fully approved. Move to Repair Phase.
                     </p>
                     {userRole === 'IT' || userRole === 'Admin' ? (
-                      <Button
-                        onClick={() => handleInRepair(selectedRepair.id)}
-                        className="w-full mt-3 !bg-harisco-blue hover:!bg-blue-700 text-xs py-2"
-                      >
-                        Start Repair Process
-                      </Button>
+                      <div className={`grid ${userRole === 'IT' ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mt-3`}>
+                        {userRole === 'IT' && (
+                          <Button
+                            onClick={() => {
+                              setRepairType('IN_HOUSE')
+                              setShowResolveModal(true)
+                            }}
+                            className="flex items-center justify-center gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white py-2"
+                          >
+                            <CheckCircle2 size={14} />
+                            Fix In-House
+                          </Button>
+                        )}
+                        <Button
+                          onClick={() => handleInRepair(selectedRepair.id)}
+                          className="flex items-center justify-center gap-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white py-2"
+                        >
+                          <Wrench size={14} />
+                          Send to Vendor
+                        </Button>
+                      </div>
                     ) : (
                       <p className="text-[10px] text-slate-400 italic mt-2">
                         Only Admin or IT can start the repair process.
@@ -571,31 +587,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       </div>
                     )}
 
-                  {selectedRepair.status === 'APPROVED' && ['IT', 'Admin'].includes(userRole) && (
-                    <div
-                      className={`grid ${userRole === 'IT' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}
-                    >
-                      {userRole === 'IT' && (
-                        <Button
-                          onClick={() => {
-                            setRepairType('IN_HOUSE')
-                            setShowResolveModal(true)
-                          }}
-                          className="w-full flex items-center justify-center gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          <CheckCircle2 size={16} />
-                          Fix In-House
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => handleInRepair(selectedRepair.id)}
-                        className="w-full flex items-center justify-center gap-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-                      >
-                        <Wrench size={16} />
-                        Send to Vendor
-                      </Button>
-                    </div>
-                  )}
+
 
                   {selectedRepair.status === 'IN_REPAIR' && ['IT', 'Admin'].includes(userRole) && (
                     <Button
@@ -648,6 +640,11 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                   onChange={(e) => {
                     const dev = devices.find((d) => d.id === parseInt(e.target.value))
                     setSelectedDevice(dev || null)
+                    if (dev?.assignedTo) {
+                      setRequester(dev.assignedTo)
+                    } else {
+                      setRequester('')
+                    }
                   }}
                 >
                   <option value="">Search or select device...</option>
@@ -687,9 +684,10 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                     Requester Name
                   </label>
                   <select
-                    className="input appearance-none bg-white py-2"
+                    className={`input appearance-none bg-white py-2 ${selectedDevice?.assignedTo ? 'bg-slate-50 cursor-not-allowed opacity-70' : ''}`}
                     value={requester}
                     onChange={(e) => setRequester(e.target.value)}
+                    disabled={!!selectedDevice?.assignedTo}
                   >
                     <option value="">Select employee...</option>
                     {employees.map((emp) => (
@@ -698,6 +696,11 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       </option>
                     ))}
                   </select>
+                  {selectedDevice?.assignedTo && (
+                    <p className="text-[10px] text-blue-600 font-medium">
+                      Note: Locked to current device owner ({selectedDevice.assignedTo}).
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

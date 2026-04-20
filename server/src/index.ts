@@ -668,9 +668,18 @@ app.post('/api/procurement/:id/intake', authorizeRoles('IT', 'Admin'), upload.si
   const receiptUrl = `/uploads/${req.file.filename}`
 
   try {
-    // 1. Create the Device in Inventory
+    const procurement = await prisma.procurement.findUnique({ where: { id: parseInt(id) } });
+    if (!procurement) return res.status(404).json({ error: 'Request not found' });
+
+    // 1. Create the Device in Inventory as ISSUED to the requester
     const device = await prisma.device.create({
-      data: { serial, model, type, status: 'IN_STOCK' },
+      data: { 
+        serial, 
+        model, 
+        type, 
+        status: 'ISSUED',
+        assignedTo: procurement.requestedBy 
+      },
     })
 
     // 2. Mark Procurement as PURCHASED and add receiptUrl
@@ -681,7 +690,7 @@ app.post('/api/procurement/:id/intake', authorizeRoles('IT', 'Admin'), upload.si
 
     await logActivity(
       'PROCUREMENT_INTAKE',
-      `Stocked ${model} [${serial}] from PRQ-${id}${receiptUrl ? ' (Receipt attached)' : ''}`,
+      `Issued ${model} [${serial}] to ${procurement.requestedBy} from PRQ-${id}`,
       req.user?.name,
     )
     res.json({ device, request })
@@ -819,17 +828,29 @@ app.patch('/api/repairs/:id/status', async (req: any, res) => {
   }
 });
 
-app.patch('/api/repairs/:id/in-repair', async (req: any, res) => {
+app.patch('/api/repairs/:id/in-repair', authorizeRoles('IT', 'Admin'), async (req: any, res) => {
   const { id } = req.params;
   try {
+    const currentRepair = await prisma.repair.findUnique({ where: { id: parseInt(id) } });
+    if (!currentRepair) return res.status(404).json({ error: 'Repair not found' });
+
+    // 1. Update Repair Status
     const repair = await prisma.repair.update({
       where: { id: parseInt(id) },
       data: { status: 'IN_REPAIR' },
       include: { device: true },
     });
-    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to IN_REPAIR`, req.user?.name);
+
+    // 2. Sync Device Status in Inventory
+    await prisma.device.update({
+      where: { id: currentRepair.deviceId },
+      data: { status: 'REPAIR' },
+    });
+
+    await logActivity('REPAIR_STARTED', `REP-${id}: Repair process started (Status: IN_REPAIR) by ${req.user.name}`, req.user?.name);
     res.json(repair);
   } catch (error) {
+    console.error('Failed to start repair:', error);
     res.status(500).json({ error: 'Failed to mark as in-repair' });
   }
 });
