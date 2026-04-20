@@ -341,7 +341,7 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                       {canApprove(selectedRequest) ? (
                         <div className="grid grid-cols-2 gap-3">
                           <Button
-                            onClick={() => handleUpdateStatus(selectedRequest.id, 'REJECTED')}
+                            onClick={() => handleUpdateStatus(selectedRequest.id, 'REJECT')}
                             variant="danger"
                             className="w-full flex items-center justify-center gap-2 text-xs"
                           >

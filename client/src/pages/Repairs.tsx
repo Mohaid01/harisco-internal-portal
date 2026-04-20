@@ -387,7 +387,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                     {canApprove(selectedRepair) ? (
                       <div className="grid grid-cols-2 gap-3">
                         <Button
-                          onClick={() => handleUpdateStatus(selectedRepair.id, 'REJECTED')}
+                          onClick={() => handleUpdateStatus(selectedRepair.id, 'REJECT')}
                           variant="danger"
                           className="w-full flex items-center justify-center gap-2 text-xs"
                         >
@@ -537,55 +537,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
               </div>
 
               {selectedRepair.status !== 'RESOLVED' && selectedRepair.status !== 'REJECTED' && (
-                <div className="pt-4 border-t border-slate-100 space-y-3">
-                  {['PENDING_IT', 'PENDING_ADMIN', 'PENDING_MANAGER'].includes(
-                    selectedRepair.status,
-                  ) &&
-                    canApprove(selectedRepair.status) && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <Button
-                          onClick={() => handleUpdateStatus(selectedRepair.id, 'REJECTED')}
-                          variant="danger"
-                          className="w-full flex items-center justify-center gap-2 text-xs"
-                        >
-                          <XCircle size={16} />
-                          Reject
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const stages = [
-                              'PENDING_IT',
-                              'PENDING_ADMIN',
-                              'PENDING_MANAGER',
-                              'APPROVED',
-                            ]
-                            const next = stages[stages.indexOf(selectedRepair.status) + 1]
-                            handleUpdateStatus(selectedRepair.id, next)
-                          }}
-                          className="w-full flex items-center justify-center gap-2 text-xs"
-                        >
-                          <CheckCircle2 size={16} />
-                          Approve Stage
-                        </Button>
-                      </div>
-                    )}
 
-                  {['PENDING_IT', 'PENDING_ADMIN', 'PENDING_MANAGER'].includes(
-                    selectedRepair.status,
-                  ) &&
-                    !canApprove(selectedRepair.status) && (
-                      <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-3">
-                        <ShieldAlert size={18} className="text-slate-400" />
-                        <div>
-                          <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
-                            Access Restricted
-                          </p>
-                          <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
-                            You don't have authority to approve this stage.
-                          </p>
-                        </div>
-                      </div>
-                    )}
 
 
 
