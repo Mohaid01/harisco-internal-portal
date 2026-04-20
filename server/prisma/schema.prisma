@@ -74,9 +74,17 @@ model Repair {
   device      Device   @relation(fields: [deviceId], references: [id])
   requester   String
   description String
-  status      String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_MANAGER, APPROVED, REJECTED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status        String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_MANAGER, APPROVED, REJECTED, IN_REPAIR, RESOLVED
+  repairType    String?  // 'IN_HOUSE' or 'VENDOR'
+  vendorName    String?
+  vendorContact String?
+  repairCost    String?
+  receiptUrl    String?
+  fixDetails    String?
+  partsReplaced String?
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ActivityLog {

@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import multer from 'multer';
 import { sendStatusEmail } from './utils/mailer.ts';
 
 declare global {
@@ -44,6 +45,33 @@ const JWT_SECRET = process.env.JWT_SECRET || 'harisco_super_secret_dev_key';
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `receipt-${Date.now()}${ext}`);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and PDFs are allowed'));
+    }
+  }
+});
 
 // --- Session and Passport Configuration ---
 app.use(
@@ -732,6 +760,69 @@ app.patch('/api/repairs/:id/status', async (req, res) => {
     res.json(repair);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
+app.patch('/api/repairs/:id/in-repair', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const repair = await prisma.repair.update({
+      where: { id: parseInt(id) },
+      data: { status: 'IN_REPAIR' },
+      include: { device: true },
+    });
+    await logActivity('UPDATE_REPAIR_STATUS', `Updated REP-${id} to IN_REPAIR`);
+    res.json(repair);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark as in-repair' });
+  }
+});
+
+app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: any, res: any) => {
+  const { id } = req.params;
+  const { repairType, fixDetails, partsReplaced, vendorName, vendorContact, repairCost } = req.body;
+  
+  if (!repairType || !fixDetails) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (repairType === 'VENDOR' && (!vendorName || !vendorContact || !repairCost)) {
+    return res.status(400).json({ error: 'Missing required vendor fields' });
+  }
+
+  try {
+    const receiptUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    if (repairType === 'VENDOR' && !receiptUrl) {
+      return res.status(400).json({ error: 'Vendor repair requires a receipt upload' });
+    }
+
+    const repair = await prisma.repair.update({
+      where: { id: parseInt(id) },
+      data: {
+        status: 'RESOLVED',
+        repairType,
+        fixDetails,
+        partsReplaced: partsReplaced || null,
+        vendorName: vendorName || null,
+        vendorContact: vendorContact || null,
+        repairCost: repairCost || null,
+        receiptUrl,
+        resolvedAt: new Date(),
+      },
+    });
+
+    // Update the device status back to ISSUED
+    await prisma.device.update({
+      where: { id: repair.deviceId },
+      data: { status: 'ISSUED' },
+    });
+
+    await logActivity('REPAIR_RESOLVED', `Resolved REP-${id} via ${repairType}`);
+    res.json(repair);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to resolve repair' });
   }
 });
 
