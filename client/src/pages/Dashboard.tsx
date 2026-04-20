@@ -10,7 +10,10 @@ import {
   X,
   Calendar,
   Download,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import Button from '../components/ui/Button'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -48,6 +51,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
     repairs: 0,
     procurements: 0,
   })
+  const [inventoryStats, setInventoryStats] = useState<any[]>([])
+  const [activeRequests, setActiveRequests] = useState<any[]>([])
   const [activities, setActivities] = useState<ActivityLog[]>([])
   const [allActivities, setAllActivities] = useState<ActivityLog[]>([])
   const [userDevices, setUserDevices] = useState<Device[]>([])
@@ -78,18 +83,35 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
         )
         setUserDevices(filteredUserDevices)
 
+        // Aggregate Inventory Stats
+        const invSummary = [
+          { name: 'In Stock', value: dev.filter((d: any) => d.status === 'IN_STOCK').length, color: '#10b981' },
+          { name: 'Issued', value: dev.filter((d: any) => d.status === 'ISSUED').length, color: '#3b82f6' },
+          { name: 'In Repair', value: dev.filter((d: any) => d.status === 'REPAIR').length, color: '#f59e0b' },
+        ].filter(s => s.value > 0)
+        setInventoryStats(invSummary)
+
+        // Aggregate Active Requests for the user
+        const userRepairs = rep.filter((r: any) => 
+          r.requester === userName && r.status !== 'RESOLVED' && r.status !== 'REJECTED'
+        ).map((r: any) => ({ ...r, type: 'REPAIR' }))
+        
+        const userProcurements = pro.filter((p: any) => 
+          p.requester === userName && p.status !== 'PURCHASED' && p.status !== 'REJECTED'
+        ).map((p: any) => ({ ...p, type: 'PROCUREMENT' }))
+
+        const allActive = [...userRepairs, ...userProcurements]
+          .sort((a, b) => new Date(b.createdAt || b.timestamp).getTime() - new Date(a.createdAt || a.timestamp).getTime())
+          .slice(0, 5)
+        setActiveRequests(allActive)
+
         if (userRole === 'Employee') {
           // Employees only see their own repairs and procurements
           setStats({
             employees: 0,
             devices: 0,
-            repairs: rep.filter(
-              (r: any) =>
-                r.status !== 'APPROVED' && r.status !== 'REJECTED' && r.requester === userName,
-            ).length,
-            procurements: pro.filter(
-              (p: any) => p.status !== 'PURCHASED' && p.requester === userName,
-            ).length,
+            repairs: userRepairs.length,
+            procurements: userProcurements.length,
           })
           setAllActivities(act)
           setActivities(act.slice(0, 6))
@@ -97,9 +119,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
           setStats({
             employees: emp.length,
             devices: dev.filter((d: any) => d.status === 'IN_STOCK').length,
-            repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED')
+            repairs: rep.filter((r: any) => r.status !== 'APPROVED' && r.status !== 'REJECTED' && r.status !== 'RESOLVED')
               .length,
-            procurements: pro.filter((p: any) => p.status !== 'PURCHASED').length,
+            procurements: pro.filter((p: any) => p.status !== 'PURCHASED' && p.status !== 'REJECTED').length,
           })
 
           // IT, Admin, and Manager see all logs
@@ -139,16 +161,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
       roles: ['IT', 'Admin', 'Manager'],
     },
     {
-      label: userRole === 'Employee' ? 'Your Active Repairs' : 'Active Repairs',
+      label: 'Active Repairs',
       value: stats.repairs,
       icon: <Wrench className="text-amber-600" />,
-      trend: userRole === 'Employee' ? 'Pending IT/Admin' : 'Pending IT/Admin',
+      trend: 'Pending IT/Admin',
+      roles: ['IT', 'Admin', 'Manager'],
     },
     {
-      label: userRole === 'Employee' ? 'Your Active Procurements' : 'Pending Procurements',
+      label: 'Pending Procurements',
       value: stats.procurements,
       icon: <AlertCircle className="text-red-600" />,
       trend: 'Approval pipeline',
+      roles: ['IT', 'Admin', 'Manager'],
     },
   ].filter((card) => !card.roles || card.roles.includes(userRole))
 
@@ -246,6 +270,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
     doc.save(`harisco_audit_log_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
+  const getRequestStep = (req: any) => {
+    const status = req.status
+    if (req.type === 'REPAIR') {
+      if (status === 'PENDING_IT') return 1
+      if (status === 'PENDING_ADMIN' || status === 'PENDING_MANAGER') return 2
+      if (status === 'APPROVED' || status === 'IN_REPAIR') return 3
+      if (status === 'RESOLVED') return 4
+      return 1
+    } else {
+      if (status === 'PENDING_IT') return 1
+      if (status === 'PENDING_ADMIN' || status === 'PENDING_MANAGER') return 2
+      if (status === 'APPROVED') return 3
+      if (status === 'PURCHASED') return 4
+      return 1
+    }
+  }
+
+  const steps = ['Received', 'Review', 'Action', 'Ready']
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-slate-400 gap-4">
@@ -272,52 +315,155 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Activities */}
-        <div className="lg:col-span-2 card">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-bold flex items-center gap-2">
-              <Activity size={18} className="text-harisco-blue" />
-              Recent Activity Log
-            </h3>
-            <button
-              onClick={() => setShowAllModal(true)}
-              className="text-xs text-harisco-blue font-bold hover:underline"
-            >
-              View All
-            </button>
-          </div>
-          <div className="space-y-6">
-            {activities.length > 0 ? (
-              activities.map((act) => (
-                <div key={act.id} className="flex gap-4 group">
-                  <div
-                    className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${act.action === 'LOGOUT' ? 'bg-red-400' : 'bg-harisco-blue'} group-hover:scale-125 transition-transform`}
-                  ></div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <p className="text-sm text-slate-800 leading-snug">
-                        <span className="font-bold text-slate-900">{act.action}:</span>{' '}
-                        {act.details}
-                      </p>
-                      <span className="text-[10px] text-slate-400 font-medium ml-2 whitespace-nowrap">
-                        {formatRelativeTime(act.timestamp)}
-                      </span>
+        <div className="lg:col-span-2 space-y-8">
+          {userRole === 'Employee' && activeRequests.length > 0 && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <Clock size={18} className="text-harisco-blue" />
+                  Request Status Timeline
+                </h3>
+                <span className="text-xs text-slate-400 font-medium">Active Requests</span>
+              </div>
+              <div className="space-y-8">
+                {activeRequests.map((req) => {
+                  const currentStep = getRequestStep(req)
+                  return (
+                    <div key={req.id} className="relative">
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          <span className="text-[10px] font-bold text-harisco-blue uppercase tracking-widest px-2 py-0.5 bg-harisco-light rounded mb-1 inline-block">
+                            {req.type === 'REPAIR' ? `REPAIR: ${req.device?.model}` : `PROCUREMENT: ${req.item}`}
+                          </span>
+                          <p className="text-xs text-slate-500 italic">
+                            Current Status: {req.status.replace('_', ' ')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-between relative">
+                        {/* Progress Line */}
+                        <div className="absolute top-4 left-0 w-full h-0.5 bg-slate-100 -z-0"></div>
+                        <div 
+                          className="absolute top-4 left-0 h-0.5 bg-harisco-blue transition-all duration-500 -z-0"
+                          style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
+                        ></div>
+                        
+                        {steps.map((step, idx) => {
+                          const stepNum = idx + 1
+                          const isCompleted = currentStep > stepNum
+                          const isCurrent = currentStep === stepNum
+                          
+                          return (
+                            <div key={step} className="flex flex-col items-center relative z-10 bg-white px-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors ${
+                                isCompleted ? 'bg-harisco-blue border-harisco-blue text-white' : 
+                                isCurrent ? 'bg-white border-harisco-blue text-harisco-blue' :
+                                'bg-white border-slate-200 text-slate-300'
+                              }`}>
+                                {isCompleted ? <CheckCircle2 size={16} /> : <span className="text-xs font-bold">{stepNum}</span>}
+                              </div>
+                              <span className={`text-[10px] mt-2 font-bold uppercase tracking-tighter ${
+                                isCurrent ? 'text-harisco-blue' : 'text-slate-400'
+                              }`}>
+                                {step}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                    <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1 opacity-70">
-                      {act.details.toLowerCase().includes('inactivity') ||
-                      act.details.toLowerCase().includes('auto')
-                        ? `Auto Performed by: ${act.performedBy || 'System'}`
-                        : `Performed by: ${act.performedBy || 'System'}`}
-                    </p>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <Activity size={18} className="text-harisco-blue" />
+                Recent Activity Log
+              </h3>
+              <button
+                onClick={() => setShowAllModal(true)}
+                className="text-xs text-harisco-blue font-bold hover:underline"
+              >
+                View All
+              </button>
+            </div>
+            <div className="space-y-6">
+              {activities.length > 0 ? (
+                activities.map((act) => (
+                  <div key={act.id} className="flex gap-4 group">
+                    <div
+                      className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${act.action === 'LOGOUT' ? 'bg-red-400' : 'bg-harisco-blue'} group-hover:scale-125 transition-transform`}
+                    ></div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <p className="text-sm text-slate-800 leading-snug">
+                          <span className="font-bold text-slate-900">{act.action}:</span>{' '}
+                          {act.details}
+                        </p>
+                        <span className="text-[10px] text-slate-400 font-medium ml-2 whitespace-nowrap">
+                          {formatRelativeTime(act.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1 opacity-70">
+                        {act.details.toLowerCase().includes('inactivity') ||
+                        act.details.toLowerCase().includes('auto')
+                          ? `Auto Performed by: ${act.performedBy || 'System'}`
+                          : `Performed by: ${act.performedBy || 'System'}`}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-center text-slate-400 py-12 text-sm">No activity recorded yet.</p>
-            )}
+                ))
+              ) : (
+                <p className="text-center text-slate-400 py-12 text-sm">No activity recorded yet.</p>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="space-y-8">
+          {userRole !== 'Employee' && inventoryStats.length > 0 && (
+            <div className="card">
+              <h3 className="text-base font-bold flex items-center gap-2 mb-6">
+                <Smartphone size={18} className="text-harisco-blue" />
+                Inventory Health
+              </h3>
+              <div className="h-[240px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={inventoryStats}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {inventoryStats.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                      itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                    />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {inventoryStats.map(stat => (
+                  <div key={stat.name} className="text-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{stat.name}</p>
+                    <p className="text-lg font-bold text-slate-900">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {userDevices.length > 0 && (
             <div className="card">
               <div className="flex items-center justify-between mb-6">
