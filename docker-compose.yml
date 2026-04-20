@@ -1,13 +1,8 @@
-version: '3.8'
-
 services:
   server:
     build: ./server
     ports:
-      - "8080:5000"
-
-
-
+      - '8080:5000'
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:./data/prod.db
@@ -17,6 +12,7 @@ services:
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - FRONTEND_URL=${FRONTEND_URL}
       - SESSION_SECRET=${SESSION_SECRET}
+      - TZ=Asia/Karachi
     volumes:
       - server-data:/app/prisma/data
       - server-backups:/app/backups
@@ -25,7 +21,7 @@ services:
   client:
     build: ./client
     ports:
-      - "3000:3000"
+      - '80:80'
     restart: always
 
 volumes:

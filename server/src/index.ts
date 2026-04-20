@@ -112,7 +112,7 @@ app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'em
 
 app.get('/auth/google/callback', (req, res, next) => {
   passport.authenticate('google', (err: any, user: any, info: any) => {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://portal.harisco.com:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://portal.harisco.com:80';
 
     if (err) {
       return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(err.message)}`);
@@ -252,7 +252,10 @@ app.post('/api/local-login', async (req, res) => {
     );
     return res.json({ token, role: user.role, name: user.name });
   }
-  return res.status(401).json({ error: 'Invalid credentials. Available users: admin, IT, manager, employee (password same as username)' });
+  return res.status(401).json({
+    error:
+      'Invalid credentials. Available users: admin, IT, manager, employee (password same as username)',
+  });
 });
 
 // Employee Routes
