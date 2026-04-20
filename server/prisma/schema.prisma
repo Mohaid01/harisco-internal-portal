@@ -63,7 +63,7 @@ model Procurement {
   estimatedCost String
   requester     String
   type          String   @default("Laptop")
-  status        String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_DIRECTOR, APPROVED, PURCHASED
+  status        String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_MANAGER, APPROVED, PURCHASED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -74,7 +74,7 @@ model Repair {
   device      Device   @relation(fields: [deviceId], references: [id])
   requester   String
   description String
-  status      String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_DIRECTOR, APPROVED, REJECTED
+  status      String   @default("PENDING_IT") // PENDING_IT, PENDING_ADMIN, PENDING_MANAGER, APPROVED, REJECTED
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

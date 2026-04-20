@@ -311,7 +311,7 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                           const stages = [
                             'PENDING_IT',
                             'PENDING_ADMIN',
-                            'PENDING_DIRECTOR',
+                            'PENDING_MANAGER',
                             'APPROVED',
                           ]
                           const next = stages[stages.indexOf(selectedRepair.status) + 1]
