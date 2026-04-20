@@ -13,7 +13,6 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import multer from 'multer';
 
-
 declare global {
   namespace Express {
     interface User {
@@ -275,7 +274,7 @@ const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: any, res: any, next: any) => {
     const userRole = (req.user?.role || '').toUpperCase();
     const normalizedAllowed = allowedRoles.map(r => r.toUpperCase());
-    
+
     if (!normalizedAllowed.includes(userRole)) {
       return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
     }
@@ -571,43 +570,40 @@ app.post('/api/inventory/:id/issue', async (req: any, res) => {
 
 // Procurement Routes
 app.get('/api/procurement', async (req: any, res) => {
-  const where = req.user.role === 'Employee' 
-    ? { requestedBy: req.user.name || req.user.email } 
-    : {};
-    
+  const where =
+    req.user.role === 'Employee' ? { requestedBy: req.user.name || req.user.email } : {};
+
   const requests = await prisma.procurement.findMany({ where });
   // Synthesize legacy approvals for consistency
-  const synthesized = requests.map((r) => {
-    const isPastApproval = ['APPROVED', 'PURCHASED'].includes(r.status)
+  const synthesized = requests.map(r => {
+    const isPastApproval = ['APPROVED', 'PURCHASED'].includes(r.status);
     return {
       ...r,
       itApproved: r.itApproved || isPastApproval,
       adminApproved: r.adminApproved || isPastApproval,
       managerApproved: r.managerApproved || isPastApproval,
-    }
-  })
-  res.json(synthesized)
-})
+    };
+  });
+  res.json(synthesized);
+});
 
 app.post('/api/procurement', async (req, res) => {
-  const { item, requestedBy, reason, type } = req.body
+  const { item, requestedBy, reason, type } = req.body;
   try {
     const procurement = await prisma.procurement.create({
       data: { item, requestedBy, reason, type, status: 'PENDING' },
-    })
+    });
     await logActivity(
       'CREATE_PROCUREMENT',
       `Requested: ${item} (Reason: ${reason})`,
-      req.user?.name,
-    )
+      req.user?.name
+    );
 
-
-
-    res.json(procurement)
+    res.json(procurement);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create request' })
+    res.status(500).json({ error: 'Failed to create request' });
   }
-})
+});
 
 app.patch('/api/procurement/:id/status', async (req: any, res) => {
   const { id } = req.params;
@@ -622,10 +618,16 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
       updateData = { status: 'REJECTED' };
       approvalNote = 'REJECTED';
     } else if (action === 'APPROVE') {
-      if (role === 'IT') { updateData.itApproved = true; approvalNote = 'IT Sign-off'; }
-      else if (role === 'ADMIN') { updateData.adminApproved = true; approvalNote = 'Admin Sign-off'; }
-      else if (role === 'MANAGER') { updateData.managerApproved = true; approvalNote = 'Manager Sign-off'; }
-      else return res.status(403).json({ error: 'Unauthorized to sign off' });
+      if (role === 'IT') {
+        updateData.itApproved = true;
+        approvalNote = 'IT Sign-off';
+      } else if (role === 'ADMIN') {
+        updateData.adminApproved = true;
+        approvalNote = 'Admin Sign-off';
+      } else if (role === 'MANAGER') {
+        updateData.managerApproved = true;
+        approvalNote = 'Manager Sign-off';
+      } else return res.status(403).json({ error: 'Unauthorized to sign off' });
     }
 
     const current = await prisma.procurement.findUnique({ where: { id: parseInt(id) } });
@@ -657,70 +659,73 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
   }
 });
 
-app.post('/api/procurement/:id/intake', authorizeRoles('IT', 'Admin'), upload.single('receipt'), async (req: any, res) => {
-  const { id } = req.params
-  const { serial, model, type } = req.body
+app.post(
+  '/api/procurement/:id/intake',
+  authorizeRoles('IT', 'Admin'),
+  upload.single('receipt'),
+  async (req: any, res) => {
+    const { id } = req.params;
+    const { serial, model, type } = req.body;
 
-  if (!req.file) {
-    return res.status(400).json({ error: 'Purchase receipt is mandatory' })
+    if (!req.file) {
+      return res.status(400).json({ error: 'Purchase receipt is mandatory' });
+    }
+
+    const receiptUrl = `/uploads/${req.file.filename}`;
+
+    try {
+      const procurement = await prisma.procurement.findUnique({ where: { id: parseInt(id) } });
+      if (!procurement) return res.status(404).json({ error: 'Request not found' });
+
+      // 1. Create the Device in Inventory as ISSUED to the requester
+      const device = await prisma.device.create({
+        data: {
+          serial,
+          model,
+          type,
+          status: 'ISSUED',
+          assignedTo: procurement.requestedBy,
+        },
+      });
+
+      // 2. Mark Procurement as PURCHASED and add receiptUrl
+      const request = await prisma.procurement.update({
+        where: { id: parseInt(id) },
+        data: { status: 'PURCHASED', receiptUrl },
+      });
+
+      await logActivity(
+        'PROCUREMENT_INTAKE',
+        `Issued ${model} [${serial}] to ${procurement.requestedBy} from PRQ-${id}`,
+        req.user?.name
+      );
+      res.json({ device, request });
+    } catch (error) {
+      console.error('Intake failed:', error);
+      res.status(500).json({ error: 'Failed to process intake' });
+    }
   }
-
-  const receiptUrl = `/uploads/${req.file.filename}`
-
-  try {
-    const procurement = await prisma.procurement.findUnique({ where: { id: parseInt(id) } });
-    if (!procurement) return res.status(404).json({ error: 'Request not found' });
-
-    // 1. Create the Device in Inventory as ISSUED to the requester
-    const device = await prisma.device.create({
-      data: { 
-        serial, 
-        model, 
-        type, 
-        status: 'ISSUED',
-        assignedTo: procurement.requestedBy 
-      },
-    })
-
-    // 2. Mark Procurement as PURCHASED and add receiptUrl
-    const request = await prisma.procurement.update({
-      where: { id: parseInt(id) },
-      data: { status: 'PURCHASED', receiptUrl },
-    })
-
-    await logActivity(
-      'PROCUREMENT_INTAKE',
-      `Issued ${model} [${serial}] to ${procurement.requestedBy} from PRQ-${id}`,
-      req.user?.name,
-    )
-    res.json({ device, request })
-  } catch (error) {
-    console.error('Intake failed:', error)
-    res.status(500).json({ error: 'Failed to process intake' })
-  }
-})
+);
 
 // Repairs Routes
 app.get('/api/repairs', async (req: any, res) => {
-  const where = req.user.role === 'Employee' 
-    ? { requester: req.user.name || req.user.email } 
-    : {};
+  const where = req.user.role === 'Employee' ? { requester: req.user.name || req.user.email } : {};
 
-  const repairs = await prisma.repair.findMany({ 
+  const repairs = await prisma.repair.findMany({
     where,
-    include: { device: true } 
+    include: { device: true },
   });
   // Synthesize legacy approvals for consistency
-  const synthesized = repairs.map((r) => {
-    const isPastApproval = ['APPROVED', 'IN_REPAIR', 'RESOLVED'].includes(r.status)
+  const synthesized = repairs.map(r => {
+    const isPastApproval = ['APPROVED', 'IN_REPAIR', 'RESOLVED'].includes(r.status);
     return {
       ...r,
       itApproved: r.itApproved || isPastApproval,
       adminApproved: r.adminApproved || isPastApproval,
       managerApproved: r.managerApproved || isPastApproval,
-    }
-  })
-  res.json(synthesized)
+    };
+  });
+  res.json(synthesized);
 });
 
 app.post('/api/repairs', async (req: any, res) => {
@@ -772,8 +777,6 @@ app.post('/api/repairs', async (req: any, res) => {
       user.name
     );
 
-
-
     res.json(repair);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create repair request' });
@@ -793,10 +796,16 @@ app.patch('/api/repairs/:id/status', async (req: any, res) => {
       updateData = { status: 'REJECTED' };
       approvalNote = 'REJECTED';
     } else if (action === 'APPROVE') {
-      if (role === 'IT') { updateData.itApproved = true; approvalNote = 'IT Sign-off'; }
-      else if (role === 'ADMIN') { updateData.adminApproved = true; approvalNote = 'Admin Sign-off'; }
-      else if (role === 'MANAGER') { updateData.managerApproved = true; approvalNote = 'Manager Sign-off'; }
-      else return res.status(403).json({ error: 'Unauthorized to sign off' });
+      if (role === 'IT') {
+        updateData.itApproved = true;
+        approvalNote = 'IT Sign-off';
+      } else if (role === 'ADMIN') {
+        updateData.adminApproved = true;
+        approvalNote = 'Admin Sign-off';
+      } else if (role === 'MANAGER') {
+        updateData.managerApproved = true;
+        approvalNote = 'Manager Sign-off';
+      } else return res.status(403).json({ error: 'Unauthorized to sign off' });
     }
 
     const current = await prisma.repair.findUnique({ where: { id: parseInt(id) } });
@@ -847,7 +856,11 @@ app.patch('/api/repairs/:id/in-repair', authorizeRoles('IT', 'Admin'), async (re
       data: { status: 'REPAIR' },
     });
 
-    await logActivity('REPAIR_STARTED', `REP-${id}: Repair process started (Status: IN_REPAIR) by ${req.user.name}`, req.user?.name);
+    await logActivity(
+      'REPAIR_STARTED',
+      `REP-${id}: Repair process started (Status: IN_REPAIR) by ${req.user.name}`,
+      req.user?.name
+    );
     res.json(repair);
   } catch (error) {
     console.error('Failed to start repair:', error);
