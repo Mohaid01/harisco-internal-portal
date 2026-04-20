@@ -18,6 +18,7 @@ interface User {
   role: string
   online?: boolean
   unreadCount?: number
+  lastMessageAt?: string | null
 }
 
 interface Message {
@@ -80,18 +81,29 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
         })
         // Also call the API to persist the read status
         markMessagesAsRead(message.senderId)
-      } else {
-        // Increment unread count for other users
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === message.senderId ? { ...u, unreadCount: (u.unreadCount || 0) + 1 } : u,
-          ),
-        )
       }
+      // Update user list unread count AND last message timestamp
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === message.senderId
+            ? { 
+                ...u, 
+                unreadCount: (activeUser && activeUser.id === message.senderId) ? u.unreadCount : (u.unreadCount || 0) + 1,
+                lastMessageAt: message.timestamp 
+              }
+            : u
+        )
+      )
     })
 
     socketRef.current.on('message_sent', (message: Message) => {
       setMessages((prev) => [...prev, message])
+      // Update last message timestamp for the receiver in the sidebar
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === message.receiverId ? { ...u, lastMessageAt: message.timestamp } : u
+        )
+      )
     })
 
     socketRef.current.on('messages_read', (data: { byUserId: number }) => {
@@ -174,11 +186,25 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
     setNewMessage('')
   }
 
-  const filteredUsers = users.filter(
+  const sortedUsers = [...users.filter(
     (u) =>
       u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email?.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  )].sort((a, b) => {
+    // 1. Sort by last message date (most recent first)
+    const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+    const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+    
+    if (dateA !== dateB) return dateB - dateA
+    
+    // 2. If no messages yet, sort by unread count
+    const aUnread = a.unreadCount || 0
+    const bUnread = b.unreadCount || 0
+    if (bUnread !== aUnread) return bUnread - aUnread
+    
+    // 3. Fallback to name
+    return (a.name || '').localeCompare(b.name || '')
+  })
 
   return (
     <div className="flex h-[calc(100vh-140px)] bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -198,31 +224,33 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredUsers.map((user) => (
+          {sortedUsers.map((user) => (
             <button
               key={user.id}
               onClick={() => setSelectedUser(user)}
               className={`w-full p-4 flex items-center gap-3 transition-all cursor-pointer border-b border-slate-50 ${
-                selectedUser?.id === user.id
-                  ? 'bg-blue-50 border-r-4 border-harisco-blue shadow-inner'
-                  : 'hover:bg-slate-100'
+                selectedUser?.id === user.id 
+                  ? 'bg-blue-50 border-r-4 border-harisco-blue shadow-inner' 
+                  : user.unreadCount 
+                    ? 'bg-harisco-blue/5' 
+                    : 'hover:bg-slate-100'
               }`}
             >
               <div className="relative">
                 <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
                   <UserIcon size={24} />
                 </div>
+                {user.unreadCount ? (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-bounce">
+                    {user.unreadCount}
+                  </span>
+                ) : null}
               </div>
               <div className="flex-1 text-left">
-                <div className="flex justify-between items-start">
-                  <h4 className="text-sm font-bold text-slate-800 leading-none">
+                <div className="flex justify-between items-center">
+                  <h4 className={`text-sm font-bold leading-none ${user.unreadCount ? 'text-harisco-blue' : 'text-slate-800'}`}>
                     {user.name || user.email}
                   </h4>
-                  {user.unreadCount ? (
-                    <span className="bg-harisco-blue text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                      {user.unreadCount}
-                    </span>
-                  ) : null}
                 </div>
                 <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1">
                   {user.role}
@@ -278,9 +306,10 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
                           <span
                             className={`text-[10px] ${isMine ? 'text-white/70' : 'text-slate-400'}`}
                           >
-                            {new Date(msg.timestamp).toLocaleTimeString([], {
+                            {new Date(msg.timestamp).toLocaleTimeString('en-US', {
                               hour: '2-digit',
                               minute: '2-digit',
+                              timeZone: 'Asia/Karachi'
                             })}
                           </span>
                           {isMine &&

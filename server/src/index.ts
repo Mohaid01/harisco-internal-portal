@@ -329,14 +329,53 @@ app.delete('/api/users/:id', authorizeRoles('IT'), async (req, res) => {
 // --- Chat Routes ---
 
 app.get('/api/chat/users', async (req: any, res) => {
+  const myId = req.user.id;
   try {
     const users = await prisma.user.findMany({
       where: {
-        NOT: { id: req.user.id }
+        NOT: { id: myId }
       },
       select: { id: true, email: true, name: true, role: true }
     });
-    res.json(users);
+
+    // Get unread counts for each user
+    const unreadCounts = await prisma.chatMessage.groupBy({
+      by: ['senderId'],
+      where: {
+        receiverId: myId,
+        isRead: false
+      },
+      _count: true
+    });
+
+    // Get last message timestamp for each user
+    const lastMessages = await prisma.chatMessage.findMany({
+      where: {
+        OR: [
+          { senderId: myId },
+          { receiverId: myId }
+        ]
+      },
+      orderBy: { timestamp: 'desc' }
+    });
+
+    const usersWithUnread = users.map(user => {
+      const unread = unreadCounts.find(c => c.senderId === user.id);
+      
+      // Find the latest message timestamp involving this specific user
+      const latestMsg = lastMessages.find(m => 
+        (m.senderId === user.id && m.receiverId === myId) || 
+        (m.senderId === myId && m.receiverId === user.id)
+      );
+
+      return {
+        ...user,
+        unreadCount: unread ? unread._count : 0,
+        lastMessageAt: latestMsg ? latestMsg.timestamp : null
+      };
+    });
+
+    res.json(usersWithUnread);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch chat users' });
   }

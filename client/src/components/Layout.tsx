@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   MessageSquare,
 } from 'lucide-react'
+import { io, Socket } from 'socket.io-client'
+import { API_BASE, WS_URL } from '../config'
 
 interface LayoutProps {
   onLogout: () => void
@@ -21,10 +23,9 @@ interface LayoutProps {
   userId: string
 }
 
-import { API_BASE } from '../config'
 const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
-const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
+const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId }) => {
   const location = useLocation()
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
@@ -124,7 +125,26 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
 
   useEffect(() => {
     fetchUnreadCount()
-    const interval = setInterval(fetchUnreadCount, 30000) // Every 30s
+    
+    // Set up Socket for real-time unread updates
+    const socket: Socket = io(WS_URL)
+    socket.on('connect', () => {
+      if (userId) socket.emit('register', parseInt(userId))
+    })
+    
+    socket.on('receive_message', () => {
+      // Refresh count when a new message arrives
+      fetchUnreadCount()
+    })
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [userId])
+
+  useEffect(() => {
+    fetchUnreadCount()
+    const interval = setInterval(fetchUnreadCount, 60000) // Poll every minute as fallback
     return () => clearInterval(interval)
   }, [location.pathname])
 
@@ -174,7 +194,11 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'Asia/Karachi'
+    })
   }
 
   return (

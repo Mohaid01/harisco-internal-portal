@@ -17,6 +17,7 @@ services:
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - FRONTEND_URL=${FRONTEND_URL}
       - SESSION_SECRET=${SESSION_SECRET}
+      - TZ=Asia/Karachi
     volumes:
       - server-data:/app/prisma/data
       - server-backups:/app/backups
