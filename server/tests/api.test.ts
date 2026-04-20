@@ -12,17 +12,15 @@ const mockPrisma = {
     findUnique: vi.fn(),
   },
   procurement: {
-    findMany: vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: 1,
-          item: 'Test Laptop',
-          estimatedCost: 'Rs. 100,000',
-          requester: 'IT',
-          status: 'PENDING_IT',
-        },
-      ]),
+    findMany: vi.fn().mockResolvedValue([
+      {
+        id: 1,
+        item: 'Test Laptop',
+        estimatedCost: 'Rs. 100,000',
+        requester: 'IT',
+        status: 'PENDING_IT',
+      },
+    ]),
     create: vi.fn().mockResolvedValue({
       id: 1,
       item: 'Test Laptop',
@@ -59,8 +57,14 @@ vi.mock('../src/utils/mailer.ts', () => ({
 }));
 
 const JWT_SECRET = 'test_secret';
-const validToken = jwt.sign({ id: 1, email: 'it@harisco.com', role: 'IT', name: 'IT Admin' }, JWT_SECRET);
-const employeeToken = jwt.sign({ id: 2, email: 'emp@harisco.com', role: 'Employee', name: 'Joe Employee' }, JWT_SECRET);
+const validToken = jwt.sign(
+  { id: 1, email: 'it@harisco.com', role: 'IT', name: 'IT Admin' },
+  JWT_SECRET
+);
+const employeeToken = jwt.sign(
+  { id: 2, email: 'emp@harisco.com', role: 'Employee', name: 'Joe Employee' },
+  JWT_SECRET
+);
 
 let app: express.Application;
 
@@ -107,7 +111,7 @@ beforeAll(async () => {
   app.post('/api/repairs', async (req: any, res) => {
     const { deviceId } = req.body;
     const user = req.user;
-    
+
     // Simulate restriction logic
     const device = await mockPrisma.device.findUnique({ where: { id: deviceId } } as any);
     if (!device) return res.status(404).json({ error: 'Device not found' });
@@ -117,7 +121,7 @@ beforeAll(async () => {
         return res.status(403).json({ error: 'Access denied.' });
       }
     }
-    
+
     res.json({ id: 1, success: true });
   });
 });
@@ -134,7 +138,9 @@ describe('GET /api/health', () => {
 
 describe('Role & Restriction Tests', () => {
   it('allows IT to request repair for any device', async () => {
-    mockPrisma.device.findUnique = vi.fn().mockResolvedValue({ id: 99, assignedTo: 'someone_else' });
+    mockPrisma.device.findUnique = vi
+      .fn()
+      .mockResolvedValue({ id: 99, assignedTo: 'someone_else' });
     const res = await request(app)
       .post('/api/repairs')
       .set('Authorization', `Bearer ${validToken}`)
@@ -152,7 +158,9 @@ describe('Role & Restriction Tests', () => {
   });
 
   it('allows Employee to request repair for their OWN device', async () => {
-    mockPrisma.device.findUnique = vi.fn().mockResolvedValue({ id: 99, assignedTo: 'Joe Employee' });
+    mockPrisma.device.findUnique = vi
+      .fn()
+      .mockResolvedValue({ id: 99, assignedTo: 'Joe Employee' });
     const res = await request(app)
       .post('/api/repairs')
       .set('Authorization', `Bearer ${employeeToken}`)
@@ -160,7 +168,6 @@ describe('Role & Restriction Tests', () => {
     expect(res.status).toBe(200);
   });
 });
-
 
 describe('GET /api/procurement (protected route)', () => {
   it('returns 401 without a token', async () => {

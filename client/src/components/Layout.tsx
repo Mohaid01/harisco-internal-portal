@@ -9,22 +9,27 @@ import {
   Bell,
   ShoppingCart,
   Loader2,
+  ShieldCheck,
+  MessageSquare,
 } from 'lucide-react'
+import { io, Socket } from 'socket.io-client'
+import { API_BASE, WS_URL } from '../config'
 
 interface LayoutProps {
   onLogout: () => void
   userRole: string
   userName: string
   onRoleChange: (role: any) => void
+  userId: string
 }
 
-import { API_BASE } from '../config'
 const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
-const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
+const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId }) => {
   const location = useLocation()
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [isNotifLoading, setIsNotifLoading] = useState(false)
   const notificationRef = useRef<HTMLDivElement>(null)
 
@@ -80,17 +85,68 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
     try {
       setIsNotifLoading(true)
       const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/activity`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      setNotifications(data.slice(0, 5)) // Just the last 5
+
+      const [resActivity, resChat] = await Promise.all([
+        fetch(`${API_BASE}/activity`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/chat/unread-messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ])
+
+      const activities = await resActivity.json()
+      const unreadChats = await resChat.json()
+
+      // Combine and sort by timestamp
+      const combined = [...unreadChats, ...activities.slice(0, 10)]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 8)
+
+      setNotifications(combined)
     } catch (error) {
       console.error('Failed to fetch notifications:', error)
     } finally {
       setIsNotifLoading(false)
     }
   }
+
+  const fetchUnreadCount = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res = await fetch(`${API_BASE}/chat/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setUnreadChatCount(data.count)
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchUnreadCount()
+    
+    // Set up Socket for real-time unread updates
+    const socket: Socket = io(WS_URL)
+    socket.on('connect', () => {
+      if (userId) socket.emit('register', parseInt(userId))
+    })
+    
+    socket.on('receive_message', () => {
+      // Refresh count when a new message arrives
+      fetchUnreadCount()
+    })
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [userId])
+
+  useEffect(() => {
+    fetchUnreadCount()
+    const interval = setInterval(fetchUnreadCount, 60000) // Poll every minute as fallback
+    return () => clearInterval(interval)
+  }, [location.pathname])
 
   useEffect(() => {
     if (showNotifications) {
@@ -125,13 +181,24 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
     },
     { icon: <ShoppingCart size={20} />, label: 'Procurement', path: '/procurement' },
     { icon: <Wrench size={20} />, label: 'Repairs', path: '/repairs' },
+    {
+      icon: <ShieldCheck size={20} />,
+      label: 'User Management',
+      path: '/users',
+      roles: ['IT'],
+    },
+    { icon: <MessageSquare size={20} />, label: 'Chat', path: '/chat' },
   ]
 
   const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole))
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'Asia/Karachi'
+    })
   }
 
   return (
@@ -159,7 +226,12 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
               }`}
             >
               {item.icon}
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.label === 'Chat' && unreadChatCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                  {unreadChatCount}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

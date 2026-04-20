@@ -1,17 +1,28 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { sendStatusEmail } from './utils/mailer.ts';
+
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      email: string;
+      role: string;
+      name?: string | null;
+    }
+  }
+}
 
 dotenv.config();
 
@@ -19,6 +30,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*', // Adjust for production
+    methods: ['GET', 'POST'],
+  },
+});
 const prisma = new PrismaClient();
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
@@ -107,6 +125,32 @@ passport.use(
   )
 );
 
+// --- Local Dev Auth Bypass ---
+app.post('/api/auth/local', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Local login disabled in production' });
+  }
+
+  const { username } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email: username } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found in authorized list' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name || user.email },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({ token, role: user.role, name: user.name || user.email, userId: user.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
 // --- Google Auth Routes ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
@@ -136,12 +180,12 @@ app.get('/auth/google/callback', (req, res, next) => {
       }
     );
     res.redirect(
-      `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}`
+      `${frontendUrl}/login?token=${token}&role=${user.role}&name=${encodeURIComponent(user.name || '')}&userId=${user.id}`
     );
   })(req, res, next);
 });
 
-// --- Authentication Middleware ---
+// --- Authentication & Authorization Middleware ---
 export const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -155,7 +199,20 @@ export const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
+const authorizeRoles = (...allowedRoles: string[]) => {
+  return (req: any, res: any, next: any) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
+    }
+    next();
+  };
+};
+
+// ... inside API routes section ...
+// These will be added after the authenticateToken middleware is applied to /api
+
 // --- Backup Service ---
+
 const DB_PATH = path.join(__dirname, '../prisma/dev.db');
 const BACKUP_DIR = path.join(__dirname, '../backups');
 
@@ -215,47 +272,195 @@ app.post('/api/admin/backup', (req, res) => {
 // --- API Routes ---
 
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login' || req.path === '/local-login' || req.path === '/health') {
+  // Whitelist login routes and health check from token requirement
+  if (req.path === '/login' || req.path === '/auth/local' || req.path === '/health') {
     return next();
   }
   return authenticateToken(req, res, next);
 });
 
+// User Management Routes (IT Only)
+app.get('/api/users', authorizeRoles('IT'), async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { email: 'asc' },
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/users', authorizeRoles('IT'), async (req, res) => {
+  const { email, role } = req.body;
+  try {
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: { role },
+      create: { email, role },
+    });
+    await logActivity(
+      'UPDATE_USER_ACCESS',
+      `Updated access for ${email} to ${role}`,
+      req.user?.name || 'System'
+    );
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', authorizeRoles('IT'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const userToDelete = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+    await prisma.user.delete({ where: { id: parseInt(id) } });
+    await logActivity(
+      'DELETE_USER_ACCESS',
+      `Removed access for ${userToDelete?.email}`,
+      req.user?.name || 'System'
+    );
+    res.json({ message: 'User removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove user' });
+  }
+});
+
+// --- Chat Routes ---
+
+app.get('/api/chat/users', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        NOT: { id: myId },
+      },
+      select: { id: true, email: true, name: true, role: true },
+    });
+
+    // Get unread counts for each user
+    const unreadCounts = await prisma.chatMessage.groupBy({
+      by: ['senderId'],
+      where: {
+        receiverId: myId,
+        isRead: false,
+      },
+      _count: true,
+    });
+
+    // Get last message timestamp for each user
+    const lastMessages = await prisma.chatMessage.findMany({
+      where: {
+        OR: [{ senderId: myId }, { receiverId: myId }],
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    const usersWithUnread = users.map(user => {
+      const unread = unreadCounts.find(c => c.senderId === user.id);
+
+      // Find the latest message timestamp involving this specific user
+      const latestMsg = lastMessages.find(
+        m =>
+          (m.senderId === user.id && m.receiverId === myId) ||
+          (m.senderId === myId && m.receiverId === user.id)
+      );
+
+      return {
+        ...user,
+        unreadCount: unread ? unread._count : 0,
+        lastMessageAt: latestMsg ? latestMsg.timestamp : null,
+      };
+    });
+
+    res.json(usersWithUnread);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch chat users' });
+  }
+});
+
+app.get('/api/chat/history/:otherUserId', async (req: any, res) => {
+  const { otherUserId } = req.params;
+  const myId = req.user.id;
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        OR: [
+          { senderId: myId, receiverId: parseInt(otherUserId) },
+          { senderId: parseInt(otherUserId), receiverId: myId },
+        ],
+      },
+      orderBy: { timestamp: 'asc' },
+    });
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch chat history' });
+  }
+});
+
+app.post('/api/chat/read/:senderId', async (req: any, res) => {
+  const { senderId } = req.params;
+  const myId = req.user.id;
+  try {
+    await prisma.chatMessage.updateMany({
+      where: {
+        senderId: parseInt(senderId),
+        receiverId: myId,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update read status' });
+  }
+});
+
+app.get('/api/chat/unread-count', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const count = await prisma.chatMessage.count({
+      where: {
+        receiverId: myId,
+        isRead: false,
+      },
+    });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch unread count' });
+  }
+});
+
+app.get('/api/chat/unread-messages', async (req: any, res) => {
+  const myId = req.user.id;
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        receiverId: myId,
+        isRead: false,
+      },
+      include: {
+        sender: { select: { name: true, email: true } },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 5,
+    });
+    res.json(
+      messages.map((m: any) => ({
+        id: `chat-${m.id}`,
+        details: `New message from ${m.sender.name || m.sender.email}: ${m.content}`,
+        timestamp: m.timestamp,
+        action: 'CHAT',
+      }))
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch unread messages' });
+  }
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
-});
-
-// Local Dev Login
-app.post('/api/local-login', async (req, res) => {
-  // Allow local login in dev environment or if explicitly enabled
-  const { username, password } = req.body;
-
-  const accounts: Record<string, any> = {
-    admin: { role: 'Admin', name: 'Local Admin', email: 'admin@harisco.com' },
-    IT: { role: 'IT', name: 'Local IT', email: 'it@harisco.com' },
-    manager: { role: 'Manager', name: 'Local Manager', email: 'manager@harisco.com' },
-    employee: { role: 'Employee', name: 'Local Employee', email: 'employee@harisco.com' },
-  };
-
-  if (accounts[username] && password === username) {
-    const user = accounts[username];
-    const token = jwt.sign(
-      {
-        id: 0,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-      },
-      JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-    return res.json({ token, role: user.role, name: user.name });
-  }
-  return res.status(401).json({
-    error:
-      'Invalid credentials. Available users: admin, IT, manager, employee (password same as username)',
-  });
 });
 
 // Employee Routes
@@ -537,8 +742,93 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// --- Socket.io Chat Implementation ---
+const userSockets = new Map<number, string>(); // userId -> socketId
+
+io.on('connection', socket => {
+  console.log(`[Socket] User connected: ${socket.id}`);
+
+  socket.on('register', (userId: any) => {
+    const id = typeof userId === 'string' ? parseInt(userId) : userId;
+    if (!isNaN(id)) {
+      userSockets.set(id, socket.id);
+      console.log(`[Socket] User ${id} registered to socket ${socket.id}`);
+    } else {
+      console.error(`[Socket] Invalid userId during registration: ${userId}`);
+    }
+  });
+
+  socket.on('send_message', async (data: { receiverId: any; content: string; senderId: any }) => {
+    try {
+      const senderId = typeof data.senderId === 'string' ? parseInt(data.senderId) : data.senderId;
+      const receiverId =
+        typeof data.receiverId === 'string' ? parseInt(data.receiverId) : data.receiverId;
+
+      if (!senderId || !receiverId || isNaN(senderId) || isNaN(receiverId)) return;
+
+      const message = await prisma.chatMessage.create({
+        data: {
+          content: data.content,
+          senderId: senderId,
+          receiverId: receiverId,
+        },
+        include: {
+          sender: { select: { name: true, role: true } },
+        },
+      });
+
+      // Send to receiver if online
+      const receiverSocketId = userSockets.get(data.receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('receive_message', message);
+      }
+
+      // Send confirmation to sender
+      socket.emit('message_sent', message);
+    } catch (error) {
+      console.error('[Socket] Error saving message:', error);
+    }
+  });
+
+  socket.on('mark_read', async (data: { senderId: any; receiverId: any }) => {
+    try {
+      const senderId = typeof data.senderId === 'string' ? parseInt(data.senderId) : data.senderId;
+      const receiverId =
+        typeof data.receiverId === 'string' ? parseInt(data.receiverId) : data.receiverId;
+
+      if (!senderId || !receiverId || isNaN(senderId) || isNaN(receiverId)) return;
+
+      await prisma.chatMessage.updateMany({
+        where: {
+          senderId: senderId,
+          receiverId: receiverId,
+          isRead: false,
+        },
+        data: { isRead: true },
+      });
+
+      const senderSocketId = userSockets.get(senderId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('messages_read', { byUserId: receiverId });
+      }
+    } catch (error) {
+      console.error('[Socket] Error marking messages as read:', error);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    for (const [userId, socketId] of userSockets.entries()) {
+      if (socketId === socket.id) {
+        userSockets.delete(userId);
+        break;
+      }
+    }
+    console.log(`[Socket] User disconnected: ${socket.id}`);
+  });
+});
+
 const BIND_IP = '0.0.0.0';
-app.listen(PORT, BIND_IP, () => {
+httpServer.listen(PORT, BIND_IP, () => {
   console.log(`🚀 Server running on http://${BIND_IP}:${PORT}`);
   console.log(`📂 Database: ${DB_PATH}`);
   console.log(`💾 Backups: ${BACKUP_DIR}`);
