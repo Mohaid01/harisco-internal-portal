@@ -281,7 +281,7 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
             {navItems.find((n) => n.path === location.pathname)?.label || 'Internal Portal'}
           </h2>
           <div className="flex items-center gap-4 relative">
-            {userRole !== 'Employee' && (
+            {false && ( // Disabled: Notification system not ready
               <div className="relative" ref={notificationRef}>
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
