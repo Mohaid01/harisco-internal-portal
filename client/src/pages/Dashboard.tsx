@@ -350,8 +350,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, userName }) => {
               <p className="text-2xl font-bold text-slate-900 dark:text-slate-50 mt-1">{stat.value}</p>
               <p className="text-xs text-slate-400 mt-2">{stat.trend}</p>
             </div>
-            <div className={`p-3 rounded-lg ${getStatColors(stat.label)}`}>
-              {React.cloneElement(stat.icon as React.ReactElement, { className: 'w-6 h-6' })}
+            <div className={`p-3 rounded-lg [&>svg]:w-6 [&>svg]:h-6 ${getStatColors(stat.label)}`}>
+              {stat.icon}
             </div>
           </div>
         ))}
