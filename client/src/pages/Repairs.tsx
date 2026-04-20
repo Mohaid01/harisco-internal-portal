@@ -534,14 +534,9 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       )}
                   </div>
                 )}
-              </div>
-
-              {selectedRepair.status !== 'RESOLVED' && selectedRepair.status !== 'REJECTED' && (
-
-
-
-
-                  {selectedRepair.status === 'IN_REPAIR' && ['IT', 'Admin'].includes(userRole) && (
+                
+                {selectedRepair.status === 'IN_REPAIR' && ['IT', 'Admin'].includes(userRole) && (
+                  <div className="pt-4 border-t border-slate-100 space-y-3">
                     <Button
                       onClick={() => {
                         setRepairType('VENDOR')
@@ -552,9 +547,9 @@ const Repairs: React.FC<RepairsProps> = ({ userRole, userName }) => {
                       <CheckCircle2 size={16} />
                       Complete Vendor Repair
                     </Button>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400 space-y-4">
