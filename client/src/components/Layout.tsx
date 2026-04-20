@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { io, Socket } from 'socket.io-client'
 import { API_BASE, WS_URL } from '../config'
+import { useLoading } from '../context/LoadingContext'
 
 interface LayoutProps {
   onLogout: () => void
@@ -22,9 +23,6 @@ interface LayoutProps {
   onRoleChange: (role: any) => void
   userId: string
 }
-
-import { API_BASE, WS_URL } from '../config'
-import { useLoading } from '../context/LoadingContext'
 
 const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
