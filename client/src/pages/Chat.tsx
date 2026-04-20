@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, User as UserIcon, Check, CheckCheck, Search, MoreVertical, MessageSquare } from 'lucide-react'
+import {
+  Send,
+  User as UserIcon,
+  Check,
+  CheckCheck,
+  Search,
+  MoreVertical,
+  MessageSquare,
+} from 'lucide-react'
 import { io, Socket } from 'socket.io-client'
 import { API_BASE, WS_URL } from '../config'
 
@@ -27,7 +35,7 @@ interface ChatProps {
   userRole: string
 }
 
-const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
+const Chat: React.FC<ChatProps> = ({ userId }) => {
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -68,7 +76,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
         // Mark as read immediately if we're in the chat
         socketRef.current?.emit('mark_read', {
           senderId: message.senderId,
-          receiverId: currentUserId
+          receiverId: currentUserId,
         })
         // Also call the API to persist the read status
         markMessagesAsRead(message.senderId)
@@ -76,8 +84,8 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
         // Increment unread count for other users
         setUsers((prev) =>
           prev.map((u) =>
-            u.id === message.senderId ? { ...u, unreadCount: (u.unreadCount || 0) + 1 } : u
-          )
+            u.id === message.senderId ? { ...u, unreadCount: (u.unreadCount || 0) + 1 } : u,
+          ),
         )
       }
     })
@@ -106,7 +114,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
     try {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/chat/users`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setUsers(data)
@@ -120,9 +128,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
     if (selectedUser) {
       fetchHistory(selectedUser.id)
       // Reset unread count
-      setUsers((prev) =>
-        prev.map((u) => (u.id === selectedUser.id ? { ...u, unreadCount: 0 } : u))
-      )
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? { ...u, unreadCount: 0 } : u)))
       // Mark as read in DB
       markMessagesAsRead(selectedUser.id)
     }
@@ -132,7 +138,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
     try {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE}/chat/history/${otherUserId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setMessages(data)
@@ -147,7 +153,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
       const token = localStorage.getItem('token')
       await fetch(`${API_BASE}/chat/read/${senderId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       socketRef.current?.emit('mark_read', { senderId, receiverId: currentUserId })
     } catch (error) {
@@ -162,15 +168,16 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
     socketRef.current?.emit('send_message', {
       senderId: currentUserId,
       receiverId: selectedUser.id,
-      content: newMessage
+      content: newMessage,
     })
 
     setNewMessage('')
   }
 
-  const filteredUsers = users.filter((u) =>
-    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredUsers = users.filter(
+    (u) =>
+      u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   return (
@@ -189,15 +196,15 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
             />
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto">
           {filteredUsers.map((user) => (
             <button
               key={user.id}
               onClick={() => setSelectedUser(user)}
               className={`w-full p-4 flex items-center gap-3 transition-all cursor-pointer border-b border-slate-50 ${
-                selectedUser?.id === user.id 
-                  ? 'bg-blue-50 border-r-4 border-harisco-blue shadow-inner' 
+                selectedUser?.id === user.id
+                  ? 'bg-blue-50 border-r-4 border-harisco-blue shadow-inner'
                   : 'hover:bg-slate-100'
               }`}
             >
@@ -208,14 +215,18 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
               </div>
               <div className="flex-1 text-left">
                 <div className="flex justify-between items-start">
-                  <h4 className="text-sm font-bold text-slate-800 leading-none">{user.name || user.email}</h4>
+                  <h4 className="text-sm font-bold text-slate-800 leading-none">
+                    {user.name || user.email}
+                  </h4>
                   {user.unreadCount ? (
                     <span className="bg-harisco-blue text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                       {user.unreadCount}
                     </span>
                   ) : null}
                 </div>
-                <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1">{user.role}</p>
+                <p className="text-[10px] text-harisco-blue font-bold uppercase tracking-wider mt-1">
+                  {user.role}
+                </p>
               </div>
             </button>
           ))}
@@ -233,7 +244,9 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
                   <UserIcon size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800">{selectedUser.name || selectedUser.email}</h3>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    {selectedUser.name || selectedUser.email}
+                  </h3>
                 </div>
               </div>
               <button className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50">
@@ -247,7 +260,10 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
                 messages.map((msg, index) => {
                   const isMine = msg.senderId === currentUserId
                   return (
-                    <div key={msg.id || index} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      key={msg.id || index}
+                      className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+                    >
                       <div
                         className={`max-w-[70%] p-4 rounded-2xl shadow-sm ${
                           isMine
@@ -256,17 +272,23 @@ const Chat: React.FC<ChatProps> = ({ userId, userName, userRole }) => {
                         }`}
                       >
                         <p className="text-sm leading-relaxed">{msg.content}</p>
-                        <div className={`flex items-center gap-1 mt-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                          <span className={`text-[10px] ${isMine ? 'text-white/70' : 'text-slate-400'}`}>
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div
+                          className={`flex items-center gap-1 mt-2 ${isMine ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <span
+                            className={`text-[10px] ${isMine ? 'text-white/70' : 'text-slate-400'}`}
+                          >
+                            {new Date(msg.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </span>
-                          {isMine && (
-                            msg.isRead ? (
+                          {isMine &&
+                            (msg.isRead ? (
                               <CheckCheck size={14} className="text-white" />
                             ) : (
                               <Check size={14} className="text-white/70" />
-                            )
-                          )}
+                            ))}
                         </div>
                       </div>
                     </div>

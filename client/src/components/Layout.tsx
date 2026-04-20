@@ -24,7 +24,7 @@ interface LayoutProps {
 import { API_BASE } from '../config'
 const INACTIVITY_LIMIT = 30 * 60 * 1000 // 30 minutes
 
-const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId }) => {
+const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName }) => {
   const location = useLocation()
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
@@ -84,15 +84,17 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
     try {
       setIsNotifLoading(true)
       const token = localStorage.getItem('token')
-      
+
       const [resActivity, resChat] = await Promise.all([
         fetch(`${API_BASE}/activity`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE}/chat/unread-messages`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_BASE}/chat/unread-messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       ])
 
       const activities = await resActivity.json()
       const unreadChats = await resChat.json()
-      
+
       // Combine and sort by timestamp
       const combined = [...unreadChats, ...activities.slice(0, 10)]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -111,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({ onLogout, userRole, userName, userId })
       const token = localStorage.getItem('token')
       if (!token) return
       const res = await fetch(`${API_BASE}/chat/unread-count`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setUnreadChatCount(data.count)
