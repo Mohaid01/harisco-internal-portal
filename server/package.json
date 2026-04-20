@@ -11,7 +11,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "ts-node prisma/seed.ts",
+    "seed": "ts-node --esm prisma/seed.ts",
+    "seed:prod": "ts-node --esm prisma/seed-prod.ts",
+
     "test": "vitest run"
   },
   "prisma": {

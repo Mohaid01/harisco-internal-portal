@@ -11,7 +11,6 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String?
-  password  String?
   googleId  String?  @unique
   role      String   @default("Employee") // IT, Admin, Manager, Employee
   createdAt DateTime @default(now())

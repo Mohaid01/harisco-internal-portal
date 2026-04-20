@@ -4,7 +4,10 @@ services:
   server:
     build: ./server
     ports:
-      - "5000:5000"
+      - "8080:5000"
+
+
+
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:./data/prod.db

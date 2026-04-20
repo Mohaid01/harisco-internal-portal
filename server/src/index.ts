@@ -11,8 +11,7 @@ import bcrypt from 'bcryptjs';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import { sendStatusEmail } from './utils/mailer.js';
-
+import { sendStatusEmail } from './utils/mailer.ts';
 
 dotenv.config();
 
@@ -21,7 +20,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const prisma = new PrismaClient();
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || '5000', 10);
+
 const JWT_SECRET = process.env.JWT_SECRET || 'harisco_super_secret_dev_key';
 
 app.use(cors());
@@ -35,12 +35,10 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
   })
 );
-
-
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -53,7 +51,8 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID || 'your_google_client_id',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'your_google_client_secret',
-      callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/auth/google/callback',
+      callbackURL:
+        process.env.GOOGLE_CALLBACK_URL || 'http://portal.harisco.com:8080/auth/google/callback',
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -71,12 +70,12 @@ passport.use(
           // Update user with googleId and name
           user = await prisma.user.update({
             where: { email },
-            data: { 
+            data: {
               googleId: profile.id,
-              name: officialName 
+              name: officialName,
             },
           });
-          
+
           // Log login activity
           await prisma.activityLog.create({
             data: {
@@ -87,7 +86,6 @@ passport.use(
           });
 
           return done(null, user);
-
         } else {
           // REJECT unknown emails as requested
           console.warn(`[Auth] Blocked login attempt from unauthorized email: ${email}`);
@@ -114,7 +112,7 @@ app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'em
 
 app.get('/auth/google/callback', (req, res, next) => {
   passport.authenticate('google', (err: any, user: any, info: any) => {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://portal.harisco.com:3000';
 
     if (err) {
       return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(err.message)}`);
@@ -197,11 +195,10 @@ const logActivity = async (action: string, details: string, performedBy: string 
   await prisma.activityLog.create({
     data: { action, details, performedBy },
   });
-  
+
   // Trigger backup on every system change/log
   await triggerBackup();
 };
-
 
 // Manual backup endpoint (optional)
 app.post('/api/admin/backup', (req, res) => {
@@ -218,7 +215,7 @@ app.post('/api/admin/backup', (req, res) => {
 // --- API Routes ---
 
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login' || req.path === '/health') {
+  if (req.path === '/login' || req.path === '/local-login' || req.path === '/health') {
     return next();
   }
   return authenticateToken(req, res, next);
@@ -227,6 +224,35 @@ app.use('/api', (req, res, next) => {
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// Local Dev Login
+app.post('/api/local-login', async (req, res) => {
+  // Allow local login in dev environment or if explicitly enabled
+  const { username, password } = req.body;
+
+  const accounts: Record<string, any> = {
+    admin: { role: 'Admin', name: 'Local Admin', email: 'admin@harisco.com' },
+    IT: { role: 'IT', name: 'Local IT', email: 'it@harisco.com' },
+    manager: { role: 'Manager', name: 'Local Manager', email: 'manager@harisco.com' },
+    employee: { role: 'Employee', name: 'Local Employee', email: 'employee@harisco.com' },
+  };
+
+  if (accounts[username] && password === username) {
+    const user = accounts[username];
+    const token = jwt.sign(
+      {
+        id: 0,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+    return res.json({ token, role: user.role, name: user.name });
+  }
+  return res.status(401).json({ error: 'Invalid credentials. Available users: admin, IT, manager, employee (password same as username)' });
 });
 
 // Employee Routes
@@ -328,7 +354,6 @@ app.post('/api/procurement', async (req, res) => {
     }
 
     res.json(procurement);
-
   } catch (error) {
     res.status(500).json({ error: 'Failed to create request' });
   }
@@ -447,7 +472,6 @@ app.post('/api/repairs', async (req: any, res) => {
     }
 
     res.json(repair);
-
   } catch (error) {
     res.status(500).json({ error: 'Failed to create repair request' });
   }
@@ -510,8 +534,9 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+const BIND_IP = '0.0.0.0';
+app.listen(PORT, BIND_IP, () => {
+  console.log(`🚀 Server running on http://${BIND_IP}:${PORT}`);
   console.log(`📂 Database: ${DB_PATH}`);
   console.log(`💾 Backups: ${BACKUP_DIR}`);
 });
