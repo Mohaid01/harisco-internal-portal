@@ -1064,6 +1064,7 @@ app.post('/api/repairs/:id/resolve', upload.single('receiptImage'), async (req: 
         receiptUrl,
         resolvedAt: new Date(),
       },
+      include: { device: true },
     });
 
     // Update the device status back to ISSUED
