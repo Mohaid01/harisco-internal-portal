@@ -12,8 +12,8 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import multer from 'multer';
-import { notify, notifyRole } from './notify';
-import { generateDailyDigest } from './digest';
+import { notify, notifyRole } from './notify.ts';
+import { generateDailyDigest } from './digest.ts';
 
 declare global {
   namespace Express {
@@ -727,9 +727,11 @@ app.patch('/api/procurement/:id/status', async (req: any, res) => {
       }
     } else {
       // Partial approval — notify next roles
-      const nextRoles = !request.itApproved ? ['IT']
-        : !request.adminApproved ? ['Admin']
-        : ['Manager'];
+      const nextRoles = !request.itApproved
+        ? ['IT']
+        : !request.adminApproved
+          ? ['Admin']
+          : ['Manager'];
       await notifyRole(prisma, io, userSockets, nextRoles, {
         type: 'APPROVAL_REQUIRED',
         title: 'Procurement Needs Your Signature',
@@ -965,9 +967,11 @@ app.patch('/api/repairs/:id/status', async (req: any, res) => {
         });
       }
     } else {
-      const nextRoles = !repair.itApproved ? ['IT']
-        : !repair.adminApproved ? ['Admin']
-        : ['Manager'];
+      const nextRoles = !repair.itApproved
+        ? ['IT']
+        : !repair.adminApproved
+          ? ['Admin']
+          : ['Manager'];
       await notifyRole(prisma, io, userSockets, nextRoles, {
         type: 'APPROVAL_REQUIRED',
         title: 'Repair Needs Your Signature',

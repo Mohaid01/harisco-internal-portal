@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Server } from 'socket.io';
-import { notify } from './notify';
+import { notify } from './notify.ts';
 
 /** Returns the start of today in PKT (UTC+5) as a UTC Date */
 function startOfDayPKT(): Date {
@@ -60,27 +60,33 @@ async function buildDigest(
   const role = user.role;
 
   if (role === 'IT') {
-    const [pendingRepairs, pendingProc, inRepair, stalledRepairs, newEmployees] = await Promise.all([
-      prisma.repair.count({ where: { status: 'PENDING', itApproved: false } }),
-      prisma.procurement.count({ where: { status: 'PENDING', itApproved: false } }),
-      prisma.repair.count({ where: { status: 'IN_REPAIR' } }),
-      prisma.repair.count({
-        where: {
-          status: 'PENDING',
-          createdAt: { lte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
-        },
-      }),
-      prisma.employee.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-      }),
-    ]);
+    const [pendingRepairs, pendingProc, inRepair, stalledRepairs, newEmployees] = await Promise.all(
+      [
+        prisma.repair.count({ where: { status: 'PENDING', itApproved: false } }),
+        prisma.procurement.count({ where: { status: 'PENDING', itApproved: false } }),
+        prisma.repair.count({ where: { status: 'IN_REPAIR' } }),
+        prisma.repair.count({
+          where: {
+            status: 'PENDING',
+            createdAt: { lte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+          },
+        }),
+        prisma.employee.count({
+          where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+        }),
+      ]
+    );
 
     const parts: string[] = [];
-    if (pendingRepairs > 0) parts.push(`${pendingRepairs} repair${pendingRepairs > 1 ? 's' : ''} need your approval`);
-    if (pendingProc > 0) parts.push(`${pendingProc} procurement${pendingProc > 1 ? 's' : ''} need your approval`);
+    if (pendingRepairs > 0)
+      parts.push(`${pendingRepairs} repair${pendingRepairs > 1 ? 's' : ''} need your approval`);
+    if (pendingProc > 0)
+      parts.push(`${pendingProc} procurement${pendingProc > 1 ? 's' : ''} need your approval`);
     if (inRepair > 0) parts.push(`${inRepair} device${inRepair > 1 ? 's' : ''} in repair`);
-    if (stalledRepairs > 0) parts.push(`⚠️ ${stalledRepairs} repair${stalledRepairs > 1 ? 's' : ''} stalled for 48h+`);
-    if (newEmployees > 0) parts.push(`${newEmployees} new employee${newEmployees > 1 ? 's' : ''} this week`);
+    if (stalledRepairs > 0)
+      parts.push(`⚠️ ${stalledRepairs} repair${stalledRepairs > 1 ? 's' : ''} stalled for 48h+`);
+    if (newEmployees > 0)
+      parts.push(`${newEmployees} new employee${newEmployees > 1 ? 's' : ''} this week`);
 
     if (parts.length === 0) return null;
 
@@ -100,8 +106,12 @@ async function buildDigest(
 
     const parts: string[] = [];
     const needsSig = pendingRepairs + pendingProc;
-    if (needsSig > 0) parts.push(`${needsSig} request${needsSig > 1 ? 's' : ''} need your signature`);
-    if (readyToPurchase > 0) parts.push(`${readyToPurchase} procurement${readyToPurchase > 1 ? 's' : ''} ready to purchase`);
+    if (needsSig > 0)
+      parts.push(`${needsSig} request${needsSig > 1 ? 's' : ''} need your signature`);
+    if (readyToPurchase > 0)
+      parts.push(
+        `${readyToPurchase} procurement${readyToPurchase > 1 ? 's' : ''} ready to purchase`
+      );
 
     if (parts.length === 0) return null;
 
@@ -122,8 +132,10 @@ async function buildDigest(
     const parts: string[] = [];
     const needsSig = pendingRepairs + pendingProc;
     if (needsSig > 0) parts.push(`${needsSig} item${needsSig > 1 ? 's' : ''} need your sign-off`);
-    if (activeRepairs > 0) parts.push(`${activeRepairs} active repair${activeRepairs > 1 ? 's' : ''} in progress`);
-    if (pendingProc > 0) parts.push(`${pendingProc} procurement${pendingProc > 1 ? 's' : ''} pending`);
+    if (activeRepairs > 0)
+      parts.push(`${activeRepairs} active repair${activeRepairs > 1 ? 's' : ''} in progress`);
+    if (pendingProc > 0)
+      parts.push(`${pendingProc} procurement${pendingProc > 1 ? 's' : ''} pending`);
 
     if (parts.length === 0) return null;
 
