@@ -12,8 +12,8 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import multer from 'multer';
-import { notify, notifyRole } from './notify.js';
-import { generateDailyDigest } from './digest.js';
+import { notify, notifyRole } from './notify';
+import { generateDailyDigest } from './digest';
 
 declare global {
   namespace Express {

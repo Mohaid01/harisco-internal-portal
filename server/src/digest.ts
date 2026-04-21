@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Server } from 'socket.io';
-import { notify } from './notify.js';
+import { notify } from './notify';
 
 /** Returns the start of today in PKT (UTC+5) as a UTC Date */
 function startOfDayPKT(): Date {

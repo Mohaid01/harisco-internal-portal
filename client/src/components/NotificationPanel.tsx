@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { Bell, X, CheckCheck, Zap, ClipboardCheck, Cpu, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { API_BASE } from '../config'
 
 interface Notification {
   id: number
@@ -24,21 +23,31 @@ interface NotificationPanelProps {
 
 const typeIcon = (type: string) => {
   switch (type) {
-    case 'APPROVAL_REQUIRED': return <Zap size={14} className="text-amber-500" />
-    case 'REQUEST_UPDATED':   return <ClipboardCheck size={14} className="text-green-500" />
-    case 'DEVICE_ASSIGNED':   return <Cpu size={14} className="text-blue-500" />
-    case 'DIGEST':            return <BarChart3 size={14} className="text-purple-500" />
-    default:                  return <Bell size={14} className="text-slate-400" />
+    case 'APPROVAL_REQUIRED':
+      return <Zap size={14} className="text-amber-500" />
+    case 'REQUEST_UPDATED':
+      return <ClipboardCheck size={14} className="text-green-500" />
+    case 'DEVICE_ASSIGNED':
+      return <Cpu size={14} className="text-blue-500" />
+    case 'DIGEST':
+      return <BarChart3 size={14} className="text-purple-500" />
+    default:
+      return <Bell size={14} className="text-slate-400" />
   }
 }
 
 const typeStyle = (type: string) => {
   switch (type) {
-    case 'APPROVAL_REQUIRED': return 'border-l-amber-400'
-    case 'REQUEST_UPDATED':   return 'border-l-green-400'
-    case 'DEVICE_ASSIGNED':   return 'border-l-blue-400'
-    case 'DIGEST':            return 'border-l-purple-400'
-    default:                  return 'border-l-slate-300'
+    case 'APPROVAL_REQUIRED':
+      return 'border-l-amber-400'
+    case 'REQUEST_UPDATED':
+      return 'border-l-green-400'
+    case 'DEVICE_ASSIGNED':
+      return 'border-l-blue-400'
+    case 'DIGEST':
+      return 'border-l-purple-400'
+    default:
+      return 'border-l-slate-300'
   }
 }
 
@@ -104,7 +113,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
           style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
         >
           {/* Header */}
-          <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-color)' }}>
+          <div
+            className="p-4 border-b flex items-center justify-between"
+            style={{ borderColor: 'var(--border-color)' }}
+          >
             <div className="flex items-center gap-2">
               <Bell size={16} className="text-harisco-blue" />
               <h3 className="font-bold text-sm">Notifications</h3>
@@ -124,14 +136,20 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
                   Mark all read
                 </button>
               )}
-              <button onClick={onToggle} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-harisco-blue/5">
+              <button
+                onClick={onToggle}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-harisco-blue/5"
+              >
                 <X size={14} />
               </button>
             </div>
           </div>
 
           {/* Notification List */}
-          <div className="max-h-[420px] overflow-y-auto divide-y" style={{ borderColor: 'var(--border-color)' }}>
+          <div
+            className="max-h-[420px] overflow-y-auto divide-y"
+            style={{ borderColor: 'var(--border-color)' }}
+          >
             {notifications.length === 0 ? (
               <div className="p-10 text-center text-slate-400">
                 <Bell size={28} className="mx-auto mb-2 opacity-20" />
@@ -153,7 +171,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
                     <div className="mt-0.5 shrink-0">{typeIcon(notif.type)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className={`text-xs font-bold truncate ${!notif.isRead ? 'text-slate-900 dark:text-slate-100' : ''}`}>
+                        <p
+                          className={`text-xs font-bold truncate ${!notif.isRead ? 'text-slate-900 dark:text-slate-100' : ''}`}
+                        >
                           {notif.title}
                         </p>
                         {!notif.isRead && (
