@@ -17,8 +17,11 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations for Chat
-  sentMessages     ChatMessage[] @relation("SentMessages")
-  receivedMessages ChatMessage[] @relation("ReceivedMessages")
+  sentMessages     ChatMessage[]  @relation("SentMessages")
+  receivedMessages ChatMessage[]  @relation("ReceivedMessages")
+
+  // Relations for Notifications
+  notifications    Notification[]
 }
 
 model ChatMessage {
@@ -101,4 +104,16 @@ model ActivityLog {
   action      String
   details     String?
   timestamp   DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String   // APPROVAL_REQUIRED | REQUEST_UPDATED | DEVICE_ASSIGNED | DIGEST
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }

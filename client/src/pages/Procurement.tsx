@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { ShoppingCart, CheckCircle2, XCircle, Plus, Loader2, X, ShieldAlert, Eye } from 'lucide-react'
+import {
+  ShoppingCart,
+  CheckCircle2,
+  XCircle,
+  Plus,
+  Loader2,
+  X,
+  ShieldAlert,
+  Eye,
+} from 'lucide-react'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { API_BASE } from '../config'
@@ -172,24 +181,24 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
   const getStatusInfo = (status: ProcurementRequest['status']) => {
     switch (status) {
       case 'PENDING':
-        return { 
-          label: 'Awaiting Approvals', 
-          color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
+        return {
+          label: 'Awaiting Approvals',
+          color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
         }
       case 'REJECTED':
-        return { 
-          label: 'Rejected', 
-          color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' 
+        return {
+          label: 'Rejected',
+          color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
         }
       case 'APPROVED':
-        return { 
-          label: 'Fully Approved', 
-          color: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' 
+        return {
+          label: 'Fully Approved',
+          color: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
         }
       case 'PURCHASED':
-        return { 
-          label: 'Purchased & Logged', 
-          color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' 
+        return {
+          label: 'Purchased & Logged',
+          color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
         }
       default:
         return { label: status, color: 'bg-slate-100 dark:bg-slate-800' }
@@ -278,114 +287,125 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                   </div>
                 </div>
 
-                  <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Requested By</span>
-                      <span className="font-semibold">{selectedRequest.requestedBy}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Type</span>
-                      <span className="font-semibold">{selectedRequest.type}</span>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-200">
-                      <p className="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">Approval Checklist</p>
-                      <div className="flex flex-wrap gap-2">
-                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.itApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
-                          IT {selectedRequest.itApproved ? <CheckCircle2 size={12} /> : null}
-                        </div>
-                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.adminApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
-                          ADMIN {selectedRequest.adminApproved ? <CheckCircle2 size={12} /> : null}
-                        </div>
-                        <div className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.managerApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
-                          MANAGER {selectedRequest.managerApproved ? <CheckCircle2 size={12} /> : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200">
-                      <p className="text-xs text-slate-400 uppercase font-bold mb-1">Reason</p>
-                      <p className="text-sm text-slate-700 leading-relaxed italic">
-                        "{selectedRequest.reason}"
-                      </p>
-                    </div>
-                    {selectedRequest.receiptUrl && (
-                      <div className="pt-2 border-t border-slate-200">
-                        <p className="text-xs text-slate-400 uppercase font-bold mb-2">Verification</p>
-                        <button
-                          onClick={() => setShowReceiptPreview(true)}
-                          className="flex items-center gap-2 text-xs text-harisco-blue font-bold hover:underline"
-                        >
-                          <Eye size={14} />
-                          Preview Purchase Receipt
-                        </button>
-                      </div>
-                    )}
+                <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Requested By</span>
+                    <span className="font-semibold">{selectedRequest.requestedBy}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Type</span>
+                    <span className="font-semibold">{selectedRequest.type}</span>
                   </div>
 
-                  {selectedRequest.status === 'APPROVED' && (
-                    <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
-                      <p className="text-xs text-green-700 font-medium flex items-center gap-2">
-                        <CheckCircle2 size={14} />
-                        Request fully approved. Proceed to intake.
-                      </p>
-                      {userRole === 'IT' || userRole === 'Admin' ? (
-                        <Button
-                          onClick={() => {
-                            setIntakeModel(selectedRequest.item)
-                            setIntakeType(selectedRequest.type)
-                            setShowIntakeModal(true)
-                          }}
-                          className="w-full mt-3 !bg-green-600 hover:!bg-green-700 text-xs py-2"
-                        >
-                          Complete Purchase & Stock
-                        </Button>
-                      ) : (
-                        <p className="text-[10px] text-slate-400 italic mt-2">
-                          Only Admin or IT can finalize intake.
-                        </p>
-                      )}
+                  <div className="pt-3 border-t border-slate-200">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">
+                      Approval Checklist
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <div
+                        className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.itApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}
+                      >
+                        IT {selectedRequest.itApproved ? <CheckCircle2 size={12} /> : null}
+                      </div>
+                      <div
+                        className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.adminApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}
+                      >
+                        ADMIN {selectedRequest.adminApproved ? <CheckCircle2 size={12} /> : null}
+                      </div>
+                      <div
+                        className={`px-2 py-1 rounded flex items-center gap-1.5 text-[10px] font-bold border ${selectedRequest.managerApproved ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-100 border-slate-200 text-slate-400'}`}
+                      >
+                        MANAGER{' '}
+                        {selectedRequest.managerApproved ? <CheckCircle2 size={12} /> : null}
+                      </div>
                     </div>
-                  )}
+                  </div>
 
-                  {selectedRequest.status === 'PENDING' && (
-                    <div className="pt-4 border-t border-slate-100 space-y-3">
-                      {canApprove(selectedRequest) ? (
-                        <div className="grid grid-cols-2 gap-3">
-                          <Button
-                            onClick={() => handleUpdateStatus(selectedRequest.id, 'REJECT')}
-                            variant="danger"
-                            className="w-full flex items-center justify-center gap-2 text-xs"
-                          >
-                            <XCircle size={16} />
-                            Reject Request
-                          </Button>
-                          <Button
-                            onClick={() => handleUpdateStatus(selectedRequest.id, 'APPROVE')}
-                            className="w-full flex items-center justify-center gap-2 text-xs"
-                          >
-                            <CheckCircle2 size={16} />
-                            Approve Stage
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-3">
-                          <ShieldAlert size={18} className="text-slate-400" />
-                          <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
-                              Sign-off Required
-                            </p>
-                            <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
-                              {userRole === 'Employee' 
-                                ? 'Waiting for IT, Admin, and Manager sign-off.' 
-                                : 'You have already signed off or lack authority for this request.'}
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                  <div className="pt-2 border-t border-slate-200">
+                    <p className="text-xs text-slate-400 uppercase font-bold mb-1">Reason</p>
+                    <p className="text-sm text-slate-700 leading-relaxed italic">
+                      "{selectedRequest.reason}"
+                    </p>
+                  </div>
+                  {selectedRequest.receiptUrl && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="text-xs text-slate-400 uppercase font-bold mb-2">
+                        Verification
+                      </p>
+                      <button
+                        onClick={() => setShowReceiptPreview(true)}
+                        className="flex items-center gap-2 text-xs text-harisco-blue font-bold hover:underline"
+                      >
+                        <Eye size={14} />
+                        Preview Purchase Receipt
+                      </button>
                     </div>
                   )}
                 </div>
+
+                {selectedRequest.status === 'APPROVED' && (
+                  <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
+                    <p className="text-xs text-green-700 font-medium flex items-center gap-2">
+                      <CheckCircle2 size={14} />
+                      Request fully approved. Proceed to intake.
+                    </p>
+                    {userRole === 'IT' || userRole === 'Admin' ? (
+                      <Button
+                        onClick={() => {
+                          setIntakeModel(selectedRequest.item)
+                          setIntakeType(selectedRequest.type)
+                          setShowIntakeModal(true)
+                        }}
+                        className="w-full mt-3 !bg-green-600 hover:!bg-green-700 text-xs py-2"
+                      >
+                        Complete Purchase & Stock
+                      </Button>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic mt-2">
+                        Only Admin or IT can finalize intake.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {selectedRequest.status === 'PENDING' && (
+                  <div className="pt-4 border-t border-slate-100 space-y-3">
+                    {canApprove(selectedRequest) ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button
+                          onClick={() => handleUpdateStatus(selectedRequest.id, 'REJECT')}
+                          variant="danger"
+                          className="w-full flex items-center justify-center gap-2 text-xs"
+                        >
+                          <XCircle size={16} />
+                          Reject Request
+                        </Button>
+                        <Button
+                          onClick={() => handleUpdateStatus(selectedRequest.id, 'APPROVE')}
+                          className="w-full flex items-center justify-center gap-2 text-xs"
+                        >
+                          <CheckCircle2 size={16} />
+                          Approve Stage
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-3">
+                        <ShieldAlert size={18} className="text-slate-400" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
+                            Sign-off Required
+                          </p>
+                          <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
+                            {userRole === 'Employee'
+                              ? 'Waiting for IT, Admin, and Manager sign-off.'
+                              : 'You have already signed off or lack authority for this request.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center text-slate-400 space-y-4">
                 <ShoppingCart size={48} className="opacity-20" />
@@ -505,9 +525,10 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
                   Device Type
                 </label>
                 <select
-                  className="input appearance-none bg-white py-2"
+                  className="input appearance-none bg-white py-2 opacity-50 cursor-not-allowed"
                   value={intakeType}
                   onChange={(e) => setIntakeType(e.target.value)}
+                  disabled
                 >
                   <option>Laptop</option>
                   <option>Monitor</option>
@@ -545,7 +566,9 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Verification: Purchase Receipt</h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">PRQ-{selectedRequest.id} — {selectedRequest.item}</p>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">
+                  PRQ-{selectedRequest.id} — {selectedRequest.item}
+                </p>
               </div>
               <button
                 onClick={() => setShowReceiptPreview(false)}
@@ -570,7 +593,9 @@ const Procurement: React.FC<ProcurementProps> = ({ userRole }) => {
               )}
             </div>
             <div className="p-4 bg-slate-50 text-center border-t border-slate-100">
-              <p className="text-[10px] text-slate-400">Viewing secure asset verification document.</p>
+              <p className="text-[10px] text-slate-400">
+                Viewing secure asset verification document.
+              </p>
             </div>
           </div>
         </div>
